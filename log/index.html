@@ -45,10 +45,10 @@
     padding:22px 4px 4px;
   }
   .topbar .mark{
-    width:30px; height:30px; border-radius:9px;
-    background:linear-gradient(135deg, var(--primary), #7AB2F0);
+    width:26px; height:26px; border-radius:50%;
+    background:linear-gradient(135deg, #D97757, #E8977A);
     display:flex; align-items:center; justify-content:center;
-    font-size:15px;
+    font-size:13px; color:#fff;
   }
   .topbar h2{
     font-family:var(--font-head);
@@ -184,11 +184,11 @@
   }
   .tab{
     flex:1;
-    font-size:13px; font-weight:600;
-    padding:9px 4px; border-radius:12px;
+    font-size:20px;
+    padding:11px 4px; border-radius:12px;
     border:1px solid var(--line); background:var(--card);
     color:var(--muted); cursor:pointer;
-    display:flex; align-items:center; justify-content:center; gap:5px;
+    display:flex; align-items:center; justify-content:center;
     transition:all .15s ease;
     white-space:nowrap;
   }
@@ -329,7 +329,7 @@
   .hearts{display:flex; gap:6px; margin-bottom:14px;}
   .heart{font-size:24px; color:#DCE3EE; cursor:pointer; line-height:1; user-select:none; transition:transform .1s ease;}
   .heart:hover{transform:scale(1.12);}
-  .heart.filled{color:var(--happy);}
+  .heart.filled{color:#D97757;}
 
   .save-indicator{
     text-align:center; font-family:var(--font-mono); font-size:11px;
@@ -376,7 +376,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="mark">🍽️</div>
+    <div class="mark">♥</div>
     <h2>지현제 회의록</h2>
   </div>
 
@@ -409,12 +409,12 @@
     </div>
 
     <div class="tabs" id="tabs">
-      <div class="tab" data-cat="plan">🗓️ 계획</div>
-      <div class="tab" data-cat="menu">🍽️ 메뉴</div>
-      <div class="tab" data-cat="finance">💰 재정</div>
-      <div class="tab" data-cat="happy">💗 행복</div>
-      <div class="tab" data-cat="travel">✈️ 여행</div>
-      <div class="tab" data-cat="goal">🎯 목표</div>
+      <div class="tab" data-cat="plan">🗓️</div>
+      <div class="tab" data-cat="menu">🍽️</div>
+      <div class="tab" data-cat="finance">💰</div>
+      <div class="tab" data-cat="happy">💗</div>
+      <div class="tab" data-cat="travel">✈️</div>
+      <div class="tab" data-cat="goal">🎯</div>
     </div>
 
     <div id="panelWrap"></div>
@@ -486,7 +486,7 @@ function blankMeeting(){
     menu: { ingredients:'', shopping:'', notes:'', days: emptyDays(['morning','lunch','dinner']) },
     plan: { days: emptyDays(['jihyun','hyeonje']), monthlyPlan: '' },
     finance: { review:'', wishlist:[], investReview:'' },
-    happiness: { me:{score:3,good:'',wish:''}, partner:{score:3,good:'',wish:''} },
+    happiness: { me:{score:5,good:'',wish:''}, partner:{score:5,good:'',wish:''} },
     travel: { items: [] },
     goals: { list: [] }
   };
@@ -608,7 +608,7 @@ function renderHome(){
           <div class="wd">${WD[(d.getDay()+6)%7]}요일</div>
         </div>
         <div class="row-mid">
-          <div class="rtitle">${monthKey.split(' ')[1]} 회의</div>
+          <div class="rtitle">${computeWeekLabel(m.date)} 회의</div>
           <div class="dots">${dots}</div>
         </div>
         <div class="chev">›</div>
@@ -655,6 +655,9 @@ function createMeeting(sourceId){
     m.plan.monthlyPlan = prev.plan.monthlyPlan;
     m.menu.ingredients = prev.menu.ingredients;
     m.menu.notes = prev.menu.notes;
+    m.finance.wishlist = prev.finance.wishlist
+      .filter(w=>!w.done)
+      .map(w=>({ id: uid(), text: w.text, price: w.price, done: false }));
   }
 
   meetings.push(m);
@@ -908,6 +911,18 @@ function getSunday(dateInput){
   return d;
 }
 function sameDate(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+
+function computeWeekLabel(meetingDateStr){
+  const meetingMonday = getMonday(meetingDateStr + 'T00:00:00');
+  const hlStart = new Date(meetingMonday); hlStart.setDate(hlStart.getDate()+7);
+  const calYear = hlStart.getFullYear();
+  const calMonth = hlStart.getMonth();
+  const firstOfMonth = new Date(calYear, calMonth, 1);
+  const gridStart = getSunday(firstOfMonth);
+  const diffDays = Math.round((hlStart - gridStart) / 86400000);
+  const weekIndex = Math.floor(diffDays/7) + 1;
+  return `${calMonth+1}월 ${weekIndex}주차`;
+}
 
 const WD_CAL = ['일','월','화','수','목','금','토'];
 
