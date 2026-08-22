@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>지현제 회의록</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#F1F6FC;
+    --card:#FFFFFF;
+    --ink:#1D2733;
+    --muted:#7C8798;
+    --line:#E3EAF3;
+    --primary:#2F7FE0;
+    --primary-soft:#E4EFFC;
+
+    --menu:#8AC4EE;    --menu-soft:#EAF5FD;
+    --plan:#6FB0EA;    --plan-soft:#E7F1FC;
+    --finance:#4F98E4; --finance-soft:#E4EEFC;
+    --happy:#3B7FDD;   --happy-soft:#E3ECFB;
+    --travel:#2C66D6;  --travel-soft:#E1E9FA;
+    --goal:#1E4FC7;    --goal-soft:#E0E7F9;
+
+    --font-head:'IBM Plex Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-body:'IBM Plex Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono:'Space Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    min-height:100vh;
+  }
+  .wrap{max-width:640px; margin:0 auto; padding:0 20px 90px;}
+
+  /* ===== TOP BAR ===== */
+  .topbar{
+    display:flex; align-items:center; gap:10px;
+    padding:22px 4px 4px;
+  }
+  .topbar .mark{
+    width:30px; height:30px; border-radius:9px;
+    background:linear-gradient(135deg, var(--primary), #7AB2F0);
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px;
+  }
+  .topbar h2{
+    font-family:var(--font-head);
+    font-size:17px; margin:0; font-weight:600;
+    letter-spacing:-0.02em;
+  }
+
+  /* ===== HOME HERO ===== */
+  .hero{padding:20px 4px 22px;}
+  .hero h1{
+    font-family:var(--font-head);
+    font-weight:600;
+    font-size:29px;
+    line-height:1.38;
+    letter-spacing:-0.02em;
+    margin:0 0 14px;
+  }
+  .stats{display:flex; gap:8px; flex-wrap:wrap;}
+  .chip{
+    font-family:var(--font-mono);
+    font-size:12px;
+    background:var(--primary-soft);
+    color:var(--primary);
+    padding:6px 12px;
+    border-radius:20px;
+    font-weight:700;
+  }
+
+  .new-btn{
+    width:100%;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    background:linear-gradient(135deg, var(--primary), #63A6EE);
+    color:#fff; border:none;
+    padding:15px; border-radius:16px;
+    font-size:15px; font-weight:700;
+    cursor:pointer; margin:18px 0 26px;
+    box-shadow:0 10px 24px rgba(47,127,224,0.28);
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .new-btn:hover{transform:translateY(-2px); box-shadow:0 14px 28px rgba(47,127,224,0.34);}
+  .new-btn:active{transform:translateY(0);}
+
+  /* ===== FILTER BAR ===== */
+  .filterbar{
+    display:flex; gap:8px; margin-bottom:18px;
+  }
+  .filterbar select, .filterbar button{
+    font-family:var(--font-body);
+    font-size:13px; font-weight:600;
+    border:1px solid var(--line);
+    background:var(--card);
+    color:var(--ink);
+    padding:9px 12px;
+    border-radius:10px;
+    cursor:pointer;
+  }
+  .filterbar button.active{
+    background:var(--primary); color:#fff; border-color:var(--primary);
+  }
+
+  /* ===== MONTH GROUPS ===== */
+  .month-label{
+    font-family:var(--font-mono);
+    font-size:12px; color:var(--muted);
+    letter-spacing:.04em;
+    margin:22px 2px 10px;
+  }
+  .month-label:first-of-type{margin-top:4px;}
+
+  .row{
+    display:flex; align-items:center; gap:14px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:14px 16px;
+    margin-bottom:10px;
+    cursor:pointer;
+    transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .row:hover{transform:translateY(-2px); box-shadow:0 8px 20px rgba(30,50,90,0.08); border-color:transparent;}
+
+  .date-badge{
+    width:52px; flex:0 0 52px; text-align:center;
+    background:var(--bg); border-radius:11px; padding:7px 0;
+  }
+  .date-badge .day{font-family:var(--font-mono); font-weight:700; font-size:19px; line-height:1;}
+  .date-badge .wd{font-size:10.5px; color:var(--muted); margin-top:3px;}
+
+  .row-mid{flex:1; min-width:0;}
+  .row-mid .rtitle{font-size:14.5px; font-weight:700; margin-bottom:6px;}
+  .dots{display:flex; gap:5px;}
+  .cdot{width:7px; height:7px; border-radius:50%; background:#DCE3EE;}
+  .cdot.on.menu{background:var(--menu);}
+  .cdot.on.plan{background:var(--plan);}
+  .cdot.on.finance{background:var(--finance);}
+  .cdot.on.happy{background:var(--happy);}
+  .cdot.on.travel{background:var(--travel);}
+  .cdot.on.goal{background:var(--goal);}
+
+  .chev{color:var(--muted); font-size:16px;}
+
+  .empty{
+    background:var(--card); border:1px dashed var(--line);
+    border-radius:16px; padding:40px 20px; text-align:center;
+    color:var(--muted); font-size:14px; line-height:1.7;
+  }
+
+  /* ===== DETAIL VIEW ===== */
+  #detailView{display:none;}
+  .dhead{display:flex; align-items:center; gap:10px; padding:22px 4px 10px;}
+  .back-btn{
+    background:var(--card); border:1px solid var(--line);
+    width:36px; height:36px; border-radius:10px; cursor:pointer; font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .date-field{display:flex; flex-direction:column; gap:1px;}
+  .date-field-label{
+    font-family:var(--font-mono); font-size:10px; letter-spacing:.04em;
+    color:var(--muted); text-transform:uppercase;
+  }
+  .dhead input[type=date]{
+    font-family:var(--font-mono); font-weight:700; font-size:15px;
+    border:none; background:transparent; color:var(--ink); padding:0;
+  }
+  .del-btn{
+    margin-left:auto; border:none; background:none; color:var(--muted);
+    font-size:13px; cursor:pointer;
+  }
+  .del-btn:hover{color:#D14343;}
+
+  .tabs{
+    display:flex; gap:6px; padding:6px 2px 18px;
+  }
+  .tab{
+    flex:1;
+    font-size:13px; font-weight:600;
+    padding:9px 4px; border-radius:12px;
+    border:1px solid var(--line); background:var(--card);
+    color:var(--muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:5px;
+    transition:all .15s ease;
+    white-space:nowrap;
+  }
+  .tab.active{color:#fff; border-color:transparent;}
+  .tab[data-cat=menu].active{background:var(--menu);}
+  .tab[data-cat=plan].active{background:var(--plan);}
+  .tab[data-cat=finance].active{background:var(--finance);}
+  .tab[data-cat=happy].active{background:var(--happy);}
+  .tab[data-cat=travel].active{background:var(--travel);}
+  .tab[data-cat=goal].active{background:var(--goal);}
+
+  .panel{
+    background:var(--card); border:1px solid var(--line);
+    border-radius:18px; padding:22px 20px;
+    animation:fadein .25s ease both;
+  }
+  @keyframes fadein{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+  .p-title{
+    font-family:var(--font-head); font-size:18px; font-weight:600;
+    letter-spacing:-0.01em;
+    margin:0 0 4px;
+  }
+  .p-sub{font-size:12.5px; color:var(--muted); margin:0 0 18px;}
+
+  .field-label{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.05em;
+    text-transform:uppercase; color:var(--muted); margin:18px 0 8px;
+  }
+  .field-label:first-of-type{margin-top:0;}
+
+  textarea, input[type=text]{
+    font-family:var(--font-body); font-size:14.5px; color:var(--ink);
+    border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; width:100%; background:var(--bg);
+  }
+  textarea{resize:vertical; min-height:70px; line-height:1.6;}
+  textarea:focus, input:focus{outline:none; border-color:var(--accent, var(--primary));}
+
+  /* ===== weekly table (menu / plan) ===== */
+  .week-wrap{overflow-x:auto; margin-bottom:6px; border-radius:12px;}
+  .week-table{border-collapse:collapse; width:100%; min-width:260px;}
+  .week-table th{
+    font-family:var(--font-mono); font-size:11px; color:var(--muted); font-weight:700;
+    padding:6px 4px; text-align:center;
+  }
+  .week-table td{padding:4px;}
+  .week-table td.rowlabel{
+    font-size:12.5px; font-weight:600; color:var(--ink); text-align:center;
+    white-space:nowrap; padding-right:6px; width:44px;
+  }
+  .week-table input{
+    width:100%; min-width:66px; border:1px solid var(--line); border-radius:8px;
+    padding:7px 5px; font-size:12.5px; background:var(--bg); text-align:center;
+  }
+  .week-table textarea.plan-cell{
+    width:100%; min-width:120px; border:1px solid var(--line); border-radius:8px;
+    padding:8px 8px; font-size:12.5px; background:var(--bg); text-align:left;
+    font-family:var(--font-body); color:var(--ink);
+    resize:none; overflow:hidden; line-height:1.6; min-height:38px;
+    white-space:pre-wrap;
+  }
+  .week-table textarea.plan-cell:focus{outline:none; border-color:var(--plan);}
+
+  .plan-top{
+    display:flex; gap:16px; flex-wrap:wrap; align-items:stretch; margin-bottom:20px;
+  }
+  .mini-cal{
+    flex:4 1 180px; display:flex; flex-direction:column; min-width:180px;
+  }
+  .mini-cal-title{
+    font-family:var(--font-mono); font-size:12px; font-weight:700;
+    color:var(--ink); margin-bottom:8px;
+  }
+  .mini-cal-table{border-collapse:collapse; width:100%;}
+  .mini-cal-table th{
+    font-family:var(--font-mono); font-size:10px; color:var(--muted); font-weight:700;
+    padding:3px 6px;
+  }
+  .mini-cal-table td{
+    font-size:12.5px; text-align:center; padding:5px 6px;
+    color:var(--ink); border-radius:6px;
+  }
+  .mini-cal-table td.out{color:#C4CBD6;}
+  .mini-cal-table td.hl{background:var(--plan); color:#fff; font-weight:700;}
+  .monthly-plan{flex:6 1 180px; min-width:180px; display:flex; flex-direction:column;}
+  .monthly-plan textarea{flex:1; min-height:0; height:auto;}
+
+  .menu-top{display:flex; gap:16px; flex-wrap:wrap; margin-bottom:4px;}
+  .menu-top-col{flex:1; min-width:160px;}
+
+  /* ===== travel ===== */
+  .travel-item{
+    border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px;
+  }
+  .travel-row{display:flex; gap:8px; margin-bottom:8px;}
+  .travel-row input{flex:1;}
+  .travel-actions{display:flex; gap:6px; margin-top:8px; align-items:center; justify-content:flex-end;}
+  .icon-btn{
+    border:1px solid var(--line); background:var(--card); border-radius:8px;
+    width:30px; height:30px; cursor:pointer; font-size:13px; color:var(--muted);
+  }
+  .icon-btn:disabled{opacity:.3; cursor:not-allowed;}
+  .text-del{border:none;background:none;color:#D14343;cursor:pointer;font-size:12.5px; font-weight:600;}
+
+  /* ===== goals ===== */
+  .goal-card{
+    border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px;
+  }
+  .goal-head{display:flex; gap:8px; align-items:center; margin-bottom:10px;}
+  .goal-head input{flex:1; font-weight:700;}
+  .goal-head button{border:none;background:none;color:#C7C9D6;cursor:pointer;font-size:15px;}
+  .goal-head button:hover{color:#D14343;}
+  .goal-actions-label{
+    font-family:var(--font-mono); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--muted); margin:2px 0 8px;
+  }
+
+  /* line list / wishlist / actions (shared) */
+  .line-item, .wish-item, .act-item{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .line-item input, .act-item input[type=text]{flex:1;}
+  .wish-item input[type=text]{flex:1;}
+  .wish-item input.price{flex:0 0 90px; font-family:var(--font-mono); font-size:13px;}
+  .line-del{border:none; background:none; color:#C7C9D6; cursor:pointer; font-size:14px;}
+  .line-del:hover{color:#D14343;}
+  .line-add{border:none; background:none; font-size:13px; font-weight:700; cursor:pointer; margin-top:2px;}
+  .act-item.done input[type=text]{color:var(--muted); text-decoration:line-through;}
+
+  /* ===== happiness ===== */
+  .h-person{
+    border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px;
+  }
+  .h-person h4{
+    font-family:var(--font-head); font-weight:600; font-size:15px; margin:0 0 10px;
+    letter-spacing:-0.01em;
+    color:var(--happy);
+  }
+  .hearts{display:flex; gap:6px; margin-bottom:14px;}
+  .heart{font-size:24px; color:#DCE3EE; cursor:pointer; line-height:1; user-select:none; transition:transform .1s ease;}
+  .heart:hover{transform:scale(1.12);}
+  .heart.filled{color:var(--happy);}
+
+  .save-indicator{
+    text-align:center; font-family:var(--font-mono); font-size:11px;
+    color:var(--muted); opacity:0; transition:opacity .3s ease; padding-top:14px;
+  }
+  .save-indicator.show{opacity:.7;}
+
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(20,25,35,0.45);
+    align-items:flex-end; justify-content:center; z-index:50;
+  }
+  .modal-card{
+    background:var(--card); border-radius:20px 20px 0 0;
+    max-width:640px; width:100%; padding:22px 20px 24px;
+    max-height:80vh; overflow-y:auto;
+  }
+  .modal-title{font-family:var(--font-head); font-weight:600; font-size:17px; margin:0 0 4px;}
+  .modal-sub{font-size:12.5px; color:var(--muted); margin:0 0 16px;}
+  .carry-list{display:flex; flex-direction:column; gap:8px; margin-bottom:14px;}
+  .carry-row{
+    display:flex; align-items:center; gap:10px;
+    border:1px solid var(--line); border-radius:12px; padding:12px 14px;
+    cursor:pointer; transition:border-color .15s ease, background .15s ease;
+  }
+  .carry-row:hover{border-color:var(--plan); background:var(--plan-soft);}
+  .carry-date{font-family:var(--font-mono); font-weight:700; font-size:13.5px;}
+  .carry-wd{font-size:12px; color:var(--muted);}
+  .modal-skip{
+    width:100%; padding:13px; border-radius:12px; border:1px solid var(--line);
+    background:var(--bg); color:var(--ink); font-weight:600; font-size:14px;
+    cursor:pointer; margin-bottom:8px;
+  }
+  .modal-cancel{
+    width:100%; padding:11px; border-radius:12px; border:none;
+    background:none; color:var(--muted); font-size:13px; cursor:pointer;
+  }
+
+  @media(max-width:480px){
+    .hero h1{font-size:25px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="mark">🍽️</div>
+    <h2>지현제 회의록</h2>
+  </div>
+
+  <!-- ===== HOME VIEW ===== -->
+  <div id="homeView">
+    <div class="hero">
+      <h1>이번 주도,<br>우리 얘기 나눠볼까요?</h1>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <button class="new-btn" id="newMeetingBtn">+ 새 회의 시작하기</button>
+
+    <div class="filterbar">
+      <select id="monthFilter"></select>
+      <button id="sortBtn" class="active" data-order="desc">최신순</button>
+    </div>
+
+    <div id="listWrap"></div>
+  </div>
+
+  <!-- ===== DETAIL VIEW ===== -->
+  <div id="detailView">
+    <div class="dhead">
+      <button class="back-btn" id="backBtn">←</button>
+      <div class="date-field">
+        <div class="date-field-label">회의 날짜</div>
+        <input type="date" id="dateInput">
+      </div>
+      <button class="del-btn" id="deleteBtn">삭제</button>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <div class="tab" data-cat="plan">🗓️ 계획</div>
+      <div class="tab" data-cat="menu">🍽️ 메뉴</div>
+      <div class="tab" data-cat="finance">💰 재정</div>
+      <div class="tab" data-cat="happy">💗 행복</div>
+      <div class="tab" data-cat="travel">✈️ 여행</div>
+      <div class="tab" data-cat="goal">🎯 목표</div>
+    </div>
+
+    <div id="panelWrap"></div>
+    <div class="save-indicator" id="saveIndicator">저장됨</div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="carryModal">
+  <div class="modal-card">
+    <div class="modal-title">이월할 회의록 선택</div>
+    <div class="modal-sub">여행·목표·식재료·메모·월별 계획을 어느 회의에서 가져올까요?</div>
+    <div id="carryList" class="carry-list"></div>
+    <button class="modal-skip" id="carrySkipBtn">이월 없이 새로 시작</button>
+    <button class="modal-cancel" id="carryCancelBtn">취소</button>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'meetings_v3';
+const WD = ['월','화','수','목','금','토','일'];
+const WD_KEYS = ['mon','tue','wed','thu','fri','sat','sun'];
+const CAT_COLOR = {menu:'var(--menu)', plan:'var(--plan)', finance:'var(--finance)', happy:'var(--happy)', travel:'var(--travel)', goal:'var(--goal)'};
+const MEAL_ROWS = [{key:'morning',label:'아침'},{key:'lunch',label:'점심'},{key:'dinner',label:'저녁'}];
+const PLAN_ROWS = [{key:'jihyun',label:'지현'},{key:'hyeonje',label:'현제'}];
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB-ShWlxTiyT_hUZNN0U7Oss9j3r4ak5ek",
+  authDomain: "family-meeting-log.firebaseapp.com",
+  projectId: "family-meeting-log",
+  storageBucket: "family-meeting-log.firebasestorage.app",
+  messagingSenderId: "1090231938259",
+  appId: "1:1090231938259:web:17a21ad8ac38325a2ab826",
+  measurementId: "G-N5DDV80VBQ"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const docRef = db.collection('storage').doc(STORAGE_KEY);
+
+let meetings = [];
+let currentId = null;
+let activeTab = 'menu';
+let saveTimer = null;
+let sortOrder = 'desc';
+let monthFilterVal = 'all';
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function dateToStr(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function todayStr(){ return dateToStr(new Date()); }
+
+function emptyDays(rowKeys){
+  const obj = {};
+  WD_KEYS.forEach(dk=>{
+    obj[dk] = {};
+    rowKeys.forEach(rk=> obj[dk][rk] = '');
+  });
+  return obj;
+}
+
+function blankMeeting(){
+  return {
+    id: uid(),
+    date: todayStr(),
+    menu: { ingredients:'', shopping:'', notes:'', days: emptyDays(['morning','lunch','dinner']) },
+    plan: { days: emptyDays(['jihyun','hyeonje']), monthlyPlan: '' },
+    finance: { review:'', wishlist:[], investReview:'' },
+    happiness: { me:{score:3,good:'',wish:''}, partner:{score:3,good:'',wish:''} },
+    travel: { items: [] },
+    goals: { list: [] }
+  };
+}
+
+function loadMeetings(){
+  docRef.onSnapshot((snap)=>{
+    if(snap.metadata.hasPendingWrites) return;
+    const data = snap.exists ? snap.data() : null;
+    meetings = data && data.value ? JSON.parse(data.value) : [];
+    if(currentId && findMeeting(currentId)){
+      renderPanel();
+    }else{
+      currentId = null;
+      document.getElementById('detailView').style.display = 'none';
+      document.getElementById('homeView').style.display = 'block';
+    }
+    renderHome();
+  }, (err)=>{ console.error('불러오기 실패', err); });
+}
+
+function queueSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    try{
+      await docRef.set({ value: JSON.stringify(meetings) });
+      const ind = document.getElementById('saveIndicator');
+      ind.classList.add('show');
+      setTimeout(()=>ind.classList.remove('show'), 1100);
+    }catch(e){ console.error('저장 실패', e); }
+  }, 450);
+}
+
+function findMeeting(id){ return meetings.find(m=>m.id===id); }
+function esc(str){ return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(str){ return (str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+/* ---------------- HOME ---------------- */
+
+function computeStats(){
+  const now = new Date();
+  const mondayOf = (dateStr)=>{
+    const d = new Date(dateStr+'T00:00:00');
+    const day = d.getDay();
+    d.setDate(d.getDate() + (day===0?-6:1-day));
+    return dateToStr(d);
+  };
+  const weeks = [];
+  for(let i=7;i>=0;i--){
+    const d = new Date(now); d.setDate(d.getDate()-i*7);
+    weeks.push(mondayOf(dateToStr(d)));
+  }
+  const held = new Set(meetings.map(m=>mondayOf(m.date)));
+  let streak=0;
+  for(let i=weeks.length-1;i>=0;i--){ if(held.has(weeks[i])) streak++; else break; }
+  return {total: meetings.length, streak};
+}
+
+function renderStats(){
+  const {total, streak} = computeStats();
+  document.getElementById('stats').innerHTML = `
+    <div class="chip">총 ${total}회</div>
+    <div class="chip">${streak}주 연속</div>
+  `;
+}
+
+function populateMonthFilter(){
+  const months = Array.from(new Set(meetings.map(m=>m.date.slice(0,7)))).sort().reverse();
+  const sel = document.getElementById('monthFilter');
+  sel.innerHTML = `<option value="all">전체 월</option>` + months.map(ym=>{
+    const [y,mo] = ym.split('-');
+    return `<option value="${ym}">${y}년 ${Number(mo)}월</option>`;
+  }).join('');
+  sel.value = monthFilterVal;
+}
+
+function dayHasAny(daysObj, rowKeys){
+  return WD_KEYS.some(dk => rowKeys.some(rk => (daysObj[dk][rk]||'').trim()));
+}
+
+function hasContent(m, cat){
+  if(cat==='menu') return !!(m.menu.ingredients.trim() || m.menu.shopping.trim() || m.menu.notes.trim() || dayHasAny(m.menu.days, ['morning','lunch','dinner']));
+  if(cat==='plan') return dayHasAny(m.plan.days, ['jihyun','hyeonje']);
+  if(cat==='finance') return !!(m.finance.review.trim() || m.finance.investReview.trim() || m.finance.wishlist.length);
+  if(cat==='happy') return !!(m.happiness.me.good.trim()||m.happiness.me.wish.trim()||m.happiness.partner.good.trim()||m.happiness.partner.wish.trim());
+  if(cat==='travel') return m.travel.items.length>0;
+  if(cat==='goal') return m.goals.list.length>0;
+  return false;
+}
+
+function renderHome(){
+  renderStats();
+  populateMonthFilter();
+
+  let list = meetings.filter(m => monthFilterVal==='all' || m.date.slice(0,7)===monthFilterVal);
+  list = list.slice().sort((a,b)=> sortOrder==='desc' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date));
+
+  const wrap = document.getElementById('listWrap');
+  if(list.length===0){
+    wrap.innerHTML = `<div class="empty">아직 기록된 회의가 없어요.<br>위 버튼을 눌러 첫 회의를 시작해보세요.</div>`;
+    return;
+  }
+
+  let html = '';
+  let lastMonth = '';
+  const cats = ['menu','plan','finance','happy','travel','goal'];
+  list.forEach(m=>{
+    const d = new Date(m.date+'T00:00:00');
+    const monthKey = `${d.getFullYear()}년 ${d.getMonth()+1}월`;
+    if(monthKey !== lastMonth){
+      html += `<div class="month-label">${monthKey}</div>`;
+      lastMonth = monthKey;
+    }
+    const dots = cats.map(c=>`<div class="cdot ${hasContent(m,c)?'on '+c:''}"></div>`).join('');
+    html += `
+      <div class="row" onclick="openDetail('${m.id}')">
+        <div class="date-badge">
+          <div class="day">${String(d.getDate()).padStart(2,'0')}</div>
+          <div class="wd">${WD[(d.getDay()+6)%7]}요일</div>
+        </div>
+        <div class="row-mid">
+          <div class="rtitle">${monthKey.split(' ')[1]} 회의</div>
+          <div class="dots">${dots}</div>
+        </div>
+        <div class="chev">›</div>
+      </div>
+    `;
+  });
+  wrap.innerHTML = html;
+}
+
+function openCarryPicker(){
+  if(meetings.length===0){ createMeeting(null); return; }
+  const list = meetings.slice().sort((a,b)=> b.date.localeCompare(a.date));
+  document.getElementById('carryList').innerHTML = list.map(m=>{
+    const d = new Date(m.date+'T00:00:00');
+    return `
+      <div class="carry-row" onclick="createMeeting('${m.id}')">
+        <div class="carry-date">${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}</div>
+        <div class="carry-wd">${WD[(d.getDay()+6)%7]}요일 회의</div>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('carryModal').style.display = 'flex';
+}
+function closeCarryPicker(){
+  document.getElementById('carryModal').style.display = 'none';
+}
+
+function createMeeting(sourceId){
+  closeCarryPicker();
+  const m = blankMeeting();
+  const prev = sourceId ? findMeeting(sourceId) : null;
+
+  if(prev){
+    m.travel.items = prev.travel.items.map(it=>({
+      id: uid(), when: it.when, where: it.where, content: it.content
+    }));
+    m.goals.list = prev.goals.list.map(g=>({
+      id: uid(),
+      text: g.text,
+      actions: g.actions
+        .filter(a=>!a.done)
+        .map(a=>({ id: uid(), text: a.text, done: a.done }))
+    }));
+    m.plan.monthlyPlan = prev.plan.monthlyPlan;
+    m.menu.ingredients = prev.menu.ingredients;
+    m.menu.notes = prev.menu.notes;
+  }
+
+  meetings.push(m);
+  queueSave();
+  openDetail(m.id, 'plan');
+}
+
+/* ---------------- DETAIL ---------------- */
+
+function openDetail(id, tab){
+  currentId = id;
+  activeTab = tab || 'plan';
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('detailView').style.display = 'block';
+  const m = findMeeting(id);
+  document.getElementById('dateInput').value = m.date;
+  renderTabs();
+  renderPanel();
+}
+
+function closeDetail(){
+  currentId = null;
+  document.getElementById('detailView').style.display = 'none';
+  document.getElementById('homeView').style.display = 'block';
+  renderHome();
+}
+
+function renderTabs(){
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.classList.toggle('active', t.dataset.cat===activeTab);
+    t.onclick = ()=>{ activeTab = t.dataset.cat; renderTabs(); renderPanel(); };
+  });
+}
+
+function renderWeekTable(daysObj, cols, changeFnName, mode){
+  const thead = '<tr><th></th>' + cols.map(c=>`<th>${c.label}</th>`).join('') + '</tr>';
+  const body = WD_KEYS.map((dk,i)=>{
+    const cells = cols.map(c=>{
+      if(mode==='list'){
+        return `<td><textarea class="plan-cell" rows="1"
+          oninput="autoGrowPlan(this); ${changeFnName}('${dk}','${c.key}', this.value)">${esc(daysObj[dk][c.key])}</textarea></td>`;
+      }
+      return `<td><input type="text" value="${escAttr(daysObj[dk][c.key])}" onchange="${changeFnName}('${dk}','${c.key}', this.value)"></td>`;
+    }).join('');
+    return `<tr><td class="rowlabel">${WD[i]}</td>${cells}</tr>`;
+  }).join('');
+  return `<div class="week-wrap"><table class="week-table"><thead>${thead}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+function autoGrowPlan(ta){
+  const tr = ta.closest('tr');
+  const cells = tr ? Array.from(tr.querySelectorAll('textarea.plan-cell')) : [ta];
+  cells.forEach(c=>{ c.style.height = 'auto'; });
+  const max = Math.max(...cells.map(c=>c.scrollHeight));
+  cells.forEach(c=>{ c.style.height = max + 'px'; });
+}
+
+function renderPanel(){
+  const m = findMeeting(currentId);
+  const wrap = document.getElementById('panelWrap');
+  const color = CAT_COLOR[activeTab];
+
+  if(activeTab==='menu'){
+    wrap.innerHTML = `
+      <div class="panel" style="--accent:${color}">
+        <div class="p-title">🍽️ 주간 식단표</div>
+        <div class="p-sub">식재료와 메모부터 끼니별 메뉴까지 한 번에 정리해요.</div>
+
+        <div class="menu-top">
+          <div class="menu-top-col">
+            <div class="field-label">식재료</div>
+            <textarea placeholder="냉장고에 있는 재료, 필요한 재료..." onchange="m_updateMenuField('ingredients', this.value)">${esc(m.menu.ingredients)}</textarea>
+          </div>
+          <div class="menu-top-col">
+            <div class="field-label">메모</div>
+            <textarea placeholder="기타 메모..." onchange="m_updateMenuField('notes', this.value)">${esc(m.menu.notes)}</textarea>
+          </div>
+        </div>
+
+        <div class="field-label">주간 식단표</div>
+        ${renderWeekTable(m.menu.days, MEAL_ROWS, 'menuDayUpdate', 'list')}
+      </div>
+    `;
+    wrap.querySelectorAll('.plan-cell').forEach(autoGrowPlan);
+  }
+
+  if(activeTab==='plan'){
+    wrap.innerHTML = `
+      <div class="panel" style="--accent:${color}">
+        <div class="p-title">🗓️ 주간 계획</div>
+        <div class="p-sub">요일별로 각자의 한 주 계획을 적어보세요.</div>
+
+        <div class="plan-top">
+          ${renderMiniCalendar(m.date)}
+          <div class="monthly-plan">
+            <div class="field-label">월별 계획</div>
+            <textarea placeholder="이번 달 계획을 적어보세요..." onchange="m_updatePlanMonthly(this.value)">${esc(m.plan.monthlyPlan)}</textarea>
+          </div>
+        </div>
+
+        ${renderWeekTable(m.plan.days, PLAN_ROWS, 'planDayUpdate', 'list')}
+      </div>
+    `;
+    wrap.querySelectorAll('.plan-cell').forEach(autoGrowPlan);
+  }
+
+  if(activeTab==='finance'){
+    wrap.innerHTML = `
+      <div class="panel" style="--accent:${color}">
+        <div class="p-title">💰 재정 회의</div>
+        <div class="p-sub">지출을 점검하고, 위시리스트와 투자 상황을 함께 확인해요.</div>
+
+        <div class="field-label">지출 점검</div>
+        <textarea placeholder="지난주/지난달 지출을 점검하며..." onchange="m_updateFinance('review', this.value)">${esc(m.finance.review)}</textarea>
+
+        <div class="field-label">위시리스트</div>
+        <div id="wishlist">${renderWishlist(m.finance.wishlist)}</div>
+        <button class="line-add" style="color:${color}" onclick="addWish()">+ 위시 아이템 추가</button>
+
+        <div class="field-label">투자 점검</div>
+        <textarea placeholder="투자 현황을 점검해보세요..." onchange="m_updateFinance('investReview', this.value)">${esc(m.finance.investReview)}</textarea>
+      </div>
+    `;
+  }
+
+  if(activeTab==='happy'){
+    wrap.innerHTML = `
+      <div class="panel" style="--accent:${color}">
+        <div class="p-title">💗 행복 회고</div>
+        <div class="p-sub">각자의 삶과 결혼 만족도를 나눠봐요.</div>
+        ${renderPerson('me','지현')}
+        ${renderPerson('partner','현제')}
+      </div>
+    `;
+  }
+
+  if(activeTab==='travel'){
+    wrap.innerHTML = `
+      <div class="panel" style="--accent:${color}">
+        <div class="p-title">✈️ 여행 계획</div>
+        <div class="p-sub">언제, 어디로, 무엇을 할지 자유롭게 추가하고 순서를 정리해요.</div>
+        <div id="travelList">${renderTravelItems(m.travel.items)}</div>
+        <button class="line-add" style="color:${color}" onclick="travelAdd()">+ 여행 추가</button>
+      </div>
+    `;
+  }
+
+  if(activeTab==='goal'){
+    wrap.innerHTML = `
+      <div class="panel" style="--accent:${color}">
+        <div class="p-title">🎯 삶의 목표</div>
+        <div class="p-sub">목표마다 실행할 action item을 함께 정리해요.</div>
+        <div id="goalList">${renderGoals(m.goals.list, color)}</div>
+        <button class="line-add" style="color:${color}" onclick="goalAdd()">+ 목표 추가</button>
+      </div>
+    `;
+  }
+}
+
+function renderPerson(key,label){
+  const m = findMeeting(currentId);
+  const p = m.happiness[key];
+  return `
+    <div class="h-person">
+      <h4>${label}</h4>
+      ${renderHearts(key, p.score)}
+      <div class="field-label">좋았던 점</div>
+      <textarea placeholder="요즘 좋았던 순간..." onchange="h_field('${key}','good', this.value)">${esc(p.good)}</textarea>
+      <div class="field-label">개선할 점</div>
+      <textarea placeholder="앞으로 개선하고 싶은 것..." onchange="h_field('${key}','wish', this.value)">${esc(p.wish)}</textarea>
+    </div>
+  `;
+}
+
+function renderHearts(key, score){
+  let html = '<div class="hearts">';
+  for(let i=1;i<=5;i++){
+    html += `<span class="heart ${i<=score?'filled':''}" onclick="h_score('${key}', ${i})">♥</span>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderWishlist(items){
+  return items.map(w=>`
+    <div class="wish-item">
+      <input type="checkbox" ${w.done?'checked':''} onchange="wishUpdate('${w.id}','done', this.checked)">
+      <input type="text" placeholder="아이템" value="${escAttr(w.text)}" onchange="wishUpdate('${w.id}','text', this.value)">
+      <input type="text" class="price" placeholder="가격" value="${escAttr(w.price)}" onchange="wishUpdate('${w.id}','price', this.value)">
+      <button class="line-del" onclick="wishDel('${w.id}')">×</button>
+    </div>
+  `).join('');
+}
+
+function renderTravelItems(items){
+  if(items.length===0) return `<div class="p-sub">아직 추가된 여행이 없어요.</div>`;
+  return items.map((it,idx)=>`
+    <div class="travel-item">
+      <div class="travel-row">
+        <input type="text" placeholder="언제 (예: 2026년 9월)" value="${escAttr(it.when)}" onchange="travelUpdate('${it.id}','when', this.value)">
+        <input type="text" placeholder="어디로" value="${escAttr(it.where)}" onchange="travelUpdate('${it.id}','where', this.value)">
+      </div>
+      <textarea placeholder="내용을 적어보세요..." onchange="travelUpdate('${it.id}','content', this.value)">${esc(it.content)}</textarea>
+      <div class="travel-actions">
+        <button class="icon-btn" ${idx===0?'disabled':''} onclick="travelMove('${it.id}',-1)">↑</button>
+        <button class="icon-btn" ${idx===items.length-1?'disabled':''} onclick="travelMove('${it.id}',1)">↓</button>
+        <button class="text-del" onclick="travelDel('${it.id}')">삭제</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderGoals(list, color){
+  if(list.length===0) return `<div class="p-sub">아직 추가된 목표가 없어요.</div>`;
+  return list.map(g=>`
+    <div class="goal-card">
+      <div class="goal-head">
+        <input type="text" placeholder="목표를 입력하세요" value="${escAttr(g.text)}" onchange="goalUpdate('${g.id}', this.value)">
+        <button onclick="goalDel('${g.id}')">×</button>
+      </div>
+      <div class="goal-actions-label">Action Item</div>
+      ${renderGoalActions(g)}
+      <button class="line-add" style="color:${color}" onclick="goalActionAdd('${g.id}')">+ action item 추가</button>
+    </div>
+  `).join('');
+}
+
+function renderGoalActions(g){
+  if(g.actions.length===0) return '';
+  return g.actions.map(a=>`
+    <div class="act-item ${a.done?'done':''}">
+      <input type="checkbox" ${a.done?'checked':''} onchange="goalActionUpdate('${g.id}','${a.id}','done', this.checked)">
+      <input type="text" placeholder="할 일" value="${escAttr(a.text)}" onchange="goalActionUpdate('${g.id}','${a.id}','text', this.value)">
+      <button class="line-del" onclick="goalActionDel('${g.id}','${a.id}')">×</button>
+    </div>
+  `).join('');
+}
+
+/* ---- menu / plan ---- */
+function getMonday(dateInput){
+  const d = new Date(dateInput);
+  d.setHours(0,0,0,0);
+  const day = d.getDay();
+  d.setDate(d.getDate() + (day===0 ? -6 : 1-day));
+  return d;
+}
+function getSunday(dateInput){
+  const d = new Date(dateInput);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() - d.getDay());
+  return d;
+}
+function sameDate(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+
+const WD_CAL = ['일','월','화','수','목','금','토'];
+
+function renderMiniCalendar(meetingDateStr){
+  const meetingMonday = getMonday(meetingDateStr + 'T00:00:00');
+  const hlStart = new Date(meetingMonday); hlStart.setDate(hlStart.getDate()+7);
+  const hlEnd = new Date(hlStart); hlEnd.setDate(hlEnd.getDate()+6);
+
+  const calYear = hlStart.getFullYear();
+  const calMonth = hlStart.getMonth();
+  const firstOfMonth = new Date(calYear, calMonth, 1);
+  const lastOfMonth = new Date(calYear, calMonth+1, 0);
+  const gridStart = getSunday(firstOfMonth);
+
+  const rows = [];
+  let cursor = new Date(gridStart);
+  while(true){
+    const row = [];
+    for(let i=0;i<7;i++){ row.push(new Date(cursor)); cursor.setDate(cursor.getDate()+1); }
+    rows.push(row);
+    if(row[6] >= lastOfMonth) break;
+  }
+
+  const headerCells = WD_CAL.map(w=>`<th>${w}</th>`).join('');
+  const bodyRows = rows.map(row=>{
+    const cells = row.map(d=>{
+      const inMonth = d.getMonth()===calMonth;
+      const highlighted = d >= hlStart && d <= hlEnd;
+      const cls = [inMonth ? '' : 'out', highlighted ? 'hl' : ''].filter(Boolean).join(' ');
+      return `<td class="${cls}">${d.getDate()}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  return `
+    <div class="mini-cal">
+      <div class="mini-cal-title">${calYear}년 ${calMonth+1}월</div>
+      <table class="mini-cal-table">
+        <thead><tr>${headerCells}</tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function m_updatePlanMonthly(val){ findMeeting(currentId).plan.monthlyPlan = val; queueSave(); }
+
+function m_updateMenuField(field, v){ findMeeting(currentId).menu[field]=v; queueSave(); }
+
+
+function menuDayUpdate(dayKey, rowKey, val){ findMeeting(currentId).menu.days[dayKey][rowKey]=val; queueSave(); }
+function planDayUpdate(dayKey, rowKey, val){ findMeeting(currentId).plan.days[dayKey][rowKey]=val; queueSave(); }
+
+/* ---- finance ---- */
+function m_updateFinance(field, v){ findMeeting(currentId).finance[field]=v; queueSave(); }
+function addWish(){ findMeeting(currentId).finance.wishlist.push({id:uid(), text:'', price:'', done:false}); renderPanel(); queueSave(); }
+function wishUpdate(id, field, val){ findMeeting(currentId).finance.wishlist.find(w=>w.id===id)[field]=val; queueSave(); }
+function wishDel(id){ const m=findMeeting(currentId); m.finance.wishlist=m.finance.wishlist.filter(w=>w.id!==id); renderPanel(); queueSave(); }
+
+/* ---- happiness ---- */
+function h_score(key, val){
+  findMeeting(currentId).happiness[key].score = Number(val);
+  queueSave();
+  renderPanel();
+}
+function h_field(key, field, val){ findMeeting(currentId).happiness[key][field] = val; queueSave(); }
+
+/* ---- travel ---- */
+function travelAdd(){ findMeeting(currentId).travel.items.push({id:uid(), when:'', where:'', content:''}); renderPanel(); queueSave(); }
+function travelUpdate(id, field, val){ findMeeting(currentId).travel.items.find(x=>x.id===id)[field]=val; queueSave(); }
+function travelDel(id){ const m=findMeeting(currentId); m.travel.items=m.travel.items.filter(x=>x.id!==id); renderPanel(); queueSave(); }
+function travelMove(id, dir){
+  const arr = findMeeting(currentId).travel.items;
+  const i = arr.findIndex(x=>x.id===id);
+  const j = i+dir;
+  if(j<0 || j>=arr.length) return;
+  [arr[i],arr[j]] = [arr[j],arr[i]];
+  renderPanel(); queueSave();
+}
+
+/* ---- goals ---- */
+function goalAdd(){ findMeeting(currentId).goals.list.push({id:uid(), text:'', actions:[]}); renderPanel(); queueSave(); }
+function goalUpdate(id, val){ findMeeting(currentId).goals.list.find(g=>g.id===id).text = val; queueSave(); }
+function goalDel(id){ const m=findMeeting(currentId); m.goals.list=m.goals.list.filter(g=>g.id!==id); renderPanel(); queueSave(); }
+function goalActionAdd(goalId){
+  const g = findMeeting(currentId).goals.list.find(g=>g.id===goalId);
+  g.actions.push({id:uid(), text:'', done:false});
+  renderPanel(); queueSave();
+}
+function goalActionUpdate(goalId, actId, field, val){
+  const g = findMeeting(currentId).goals.list.find(g=>g.id===goalId);
+  const a = g.actions.find(a=>a.id===actId);
+  a[field]=val;
+  if(field==='done') renderPanel();
+  queueSave();
+}
+function goalActionDel(goalId, actId){
+  const g = findMeeting(currentId).goals.list.find(g=>g.id===goalId);
+  g.actions = g.actions.filter(a=>a.id!==actId);
+  renderPanel(); queueSave();
+}
+
+/* ---------------- EVENTS ---------------- */
+document.getElementById('newMeetingBtn').addEventListener('click', openCarryPicker);
+document.getElementById('carrySkipBtn').addEventListener('click', ()=> createMeeting(null));
+document.getElementById('carryCancelBtn').addEventListener('click', closeCarryPicker);
+document.getElementById('backBtn').addEventListener('click', closeDetail);
+document.getElementById('deleteBtn').addEventListener('click', ()=>{
+  if(!confirm('이 회의 기록을 삭제할까요?')) return;
+  meetings = meetings.filter(m=>m.id!==currentId);
+  queueSave();
+  closeDetail();
+});
+document.getElementById('dateInput').addEventListener('change', (e)=>{
+  findMeeting(currentId).date = e.target.value;
+  queueSave();
+  if(activeTab==='plan') renderPanel();
+});
+document.getElementById('monthFilter').addEventListener('change', (e)=>{
+  monthFilterVal = e.target.value; renderHome();
+});
+document.getElementById('sortBtn').addEventListener('click', (e)=>{
+  sortOrder = sortOrder==='desc' ? 'asc' : 'desc';
+  e.target.textContent = sortOrder==='desc' ? '최신순' : '오래된순';
+  renderHome();
+});
+
+loadMeetings();
+</script>
+</body>
+</html>
