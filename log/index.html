@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>지현제 회의록</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#D97757">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="지현제 회의록">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -230,7 +236,8 @@
 
   /* ===== weekly table (menu / plan) ===== */
   .week-wrap{overflow-x:auto; margin-bottom:6px; border-radius:12px;}
-  .week-table{border-collapse:collapse; width:100%; min-width:260px;}
+  .week-table{border-collapse:collapse; width:100%; min-width:260px; table-layout:fixed;}
+  .week-table td.rowlabel, .week-table th:first-child{width:44px;}
   .week-table th{
     font-family:var(--font-mono); font-size:11px; color:var(--muted); font-weight:700;
     padding:6px 4px; text-align:center;
@@ -438,7 +445,7 @@ const STORAGE_KEY = 'meetings_v3';
 const WD = ['월','화','수','목','금','토','일'];
 const WD_KEYS = ['mon','tue','wed','thu','fri','sat','sun'];
 const CAT_COLOR = {menu:'var(--menu)', plan:'var(--plan)', finance:'var(--finance)', happy:'var(--happy)', travel:'var(--travel)', goal:'var(--goal)'};
-const MEAL_ROWS = [{key:'morning',label:'아침'},{key:'lunch',label:'점심'},{key:'dinner',label:'저녁'}];
+const MEAL_ROWS = [{key:'lunch',label:'아점'},{key:'dinner',label:'저녁'}];
 const PLAN_ROWS = [{key:'jihyun',label:'지현'},{key:'hyeonje',label:'현제'}];
 
 const firebaseConfig = {
@@ -483,7 +490,7 @@ function blankMeeting(){
   return {
     id: uid(),
     date: todayStr(),
-    menu: { ingredients:'', shopping:'', notes:'', days: emptyDays(['morning','lunch','dinner']) },
+    menu: { ingredients:'', shopping:'', notes:'', days: emptyDays(['lunch','dinner']) },
     plan: { days: emptyDays(['jihyun','hyeonje']), monthlyPlan: '' },
     finance: { review:'', wishlist:[], investReview:'' },
     happiness: { me:{score:5,good:'',wish:''}, partner:{score:5,good:'',wish:''} },
