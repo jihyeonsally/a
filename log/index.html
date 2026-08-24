@@ -170,7 +170,11 @@
     width:36px; height:36px; border-radius:10px; cursor:pointer; font-size:16px;
     display:flex; align-items:center; justify-content:center;
   }
-  .date-field{position:relative; display:inline-flex; align-items:center; cursor:pointer;}
+  .date-field{position:relative; display:inline-flex; align-items:center; gap:6px; cursor:pointer;}
+  .date-field-label{
+    font-family:var(--font-mono); font-size:10px; letter-spacing:.04em;
+    color:var(--muted); text-transform:uppercase; pointer-events:none; white-space:nowrap;
+  }
   .date-display{
     font-family:var(--font-mono); font-weight:700; font-size:13px; color:var(--ink);
     pointer-events:none; white-space:nowrap;
@@ -251,9 +255,9 @@
     white-space:nowrap; padding-right:6px; width:50px; vertical-align:middle;
   }
   .day-btn{
-    width:100%; height:100%; min-height:38px; border:1px solid transparent; background:none; cursor:pointer;
-    border-radius:8px; padding:5px 2px; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; gap:1px; transition:background .15s ease, border-color .15s ease;
+    width:100%; border:1px solid transparent; background:none; cursor:pointer;
+    border-radius:8px; padding:5px 2px; display:inline-flex; flex-direction:column;
+    align-items:center; gap:1px; transition:background .15s ease, border-color .15s ease;
   }
   .day-btn:hover{background:var(--plan-soft); border-color:var(--plan);}
   .rl-date{font-family:var(--font-mono); font-size:10.5px; color:var(--muted);}
@@ -276,26 +280,26 @@
     display:flex; gap:16px; flex-wrap:wrap; align-items:stretch; margin-bottom:20px;
   }
   .mini-cal{
-    flex:4 1 180px; display:flex; flex-direction:column; min-width:180px;
+    flex:4 1 150px; display:flex; flex-direction:column; min-width:150px;
   }
   .mini-cal-title{
-    font-family:var(--font-mono); font-size:12px; font-weight:700;
-    color:var(--ink); margin-bottom:8px;
+    font-family:var(--font-mono); font-size:11px; font-weight:700;
+    color:var(--ink); margin-bottom:6px;
     display:flex; align-items:center; justify-content:space-between;
   }
   .cal-nav{
     border:none; background:none; color:var(--muted); cursor:pointer;
-    font-size:15px; padding:2px 6px; border-radius:6px; line-height:1;
+    font-size:13px; padding:2px 5px; border-radius:6px; line-height:1;
   }
   .cal-nav:hover{background:var(--bg); color:var(--plan);}
   .mini-cal-table{border-collapse:collapse; width:100%;}
   .mini-cal-table th{
-    font-family:var(--font-mono); font-size:10px; color:var(--muted); font-weight:700;
-    padding:3px 6px;
+    font-family:var(--font-mono); font-size:9px; color:var(--muted); font-weight:700;
+    padding:2px 3px;
   }
   .mini-cal-table td{
-    font-size:12.5px; text-align:center; padding:5px 6px;
-    color:var(--ink); border-radius:6px;
+    font-size:11px; text-align:center; padding:3px 3px;
+    color:var(--ink); border-radius:5px;
   }
   .mini-cal-table td.out{color:#C4CBD6;}
   .mini-cal-table td.hl{background:var(--plan); color:#fff; font-weight:700;}
@@ -419,7 +423,7 @@
   <!-- ===== HOME VIEW ===== -->
   <div id="homeView">
     <div class="hero">
-      <h1>이번 주도,<br>우리 얘기 나눠볼까요?</h1>
+      <h1>지현제네 가족회의</h1>
       <div class="stats" id="stats"></div>
     </div>
 
@@ -438,6 +442,7 @@
     <div class="dhead">
       <button class="back-btn" id="backBtn">←</button>
       <div class="date-field">
+        <span class="date-field-label">회의 날짜</span>
         <span class="date-display" id="dateDisplay"></span>
         <input type="date" id="dateInput">
       </div>
@@ -735,10 +740,8 @@ function updateSiteTitle(m){
   document.getElementById('siteTitle').textContent = m ? `지현제네 ${computeWeekLabel(m)} 회의` : '지현제네';
 }
 
-const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function formatDateDisplay(dateStr){
-  const d = new Date(dateStr + 'T00:00:00');
-  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
+  return dateStr;
 }
 function updateDateDisplay(dateStr){
   document.getElementById('dateDisplay').textContent = formatDateDisplay(dateStr);
@@ -803,7 +806,6 @@ function renderPanel(){
           </div>
         </div>
 
-        <div class="field-label">메모</div>
         <textarea placeholder="메모를 남겨보세요..." onchange="m_updatePlanMemo(this.value)">${esc(m.plan.memo)}</textarea>
 
         <div class="field-label">주간 계획</div>
