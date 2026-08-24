@@ -237,7 +237,7 @@
   /* ===== weekly table (menu / plan) ===== */
   .week-wrap{overflow-x:auto; margin-bottom:6px; border-radius:12px;}
   .week-table{border-collapse:collapse; width:100%; min-width:260px; table-layout:fixed;}
-  .week-table td.rowlabel, .week-table th:first-child{width:44px;}
+  .week-table td.rowlabel, .week-table th:first-child{width:50px;}
   .week-table th{
     font-family:var(--font-mono); font-size:11px; color:var(--muted); font-weight:700;
     padding:6px 4px; text-align:center;
@@ -245,8 +245,16 @@
   .week-table td{padding:4px;}
   .week-table td.rowlabel{
     font-size:12.5px; font-weight:600; color:var(--ink); text-align:center;
-    white-space:nowrap; padding-right:6px; width:44px;
+    white-space:nowrap; padding-right:6px; width:50px;
   }
+  .day-btn{
+    width:100%; border:1px solid transparent; background:none; cursor:pointer;
+    border-radius:8px; padding:5px 2px; display:flex; flex-direction:column;
+    align-items:center; gap:1px; transition:background .15s ease, border-color .15s ease;
+  }
+  .day-btn:hover{background:var(--plan-soft); border-color:var(--plan);}
+  .rl-date{font-family:var(--font-mono); font-size:10.5px; color:var(--muted);}
+  .rl-wd{font-size:12.5px; font-weight:700; color:var(--ink);}
   .week-table input{
     width:100%; min-width:66px; border:1px solid var(--line); border-radius:8px;
     padding:7px 5px; font-size:12.5px; background:var(--bg); text-align:center;
@@ -269,7 +277,13 @@
   .mini-cal-title{
     font-family:var(--font-mono); font-size:12px; font-weight:700;
     color:var(--ink); margin-bottom:8px;
+    display:flex; align-items:center; justify-content:space-between;
   }
+  .cal-nav{
+    border:none; background:none; color:var(--muted); cursor:pointer;
+    font-size:15px; padding:2px 6px; border-radius:6px; line-height:1;
+  }
+  .cal-nav:hover{background:var(--bg); color:var(--plan);}
   .mini-cal-table{border-collapse:collapse; width:100%;}
   .mini-cal-table th{
     font-family:var(--font-mono); font-size:10px; color:var(--muted); font-weight:700;
@@ -485,13 +499,18 @@ function emptyDays(rowKeys){
   });
   return obj;
 }
+function emptyBoolDays(){
+  const obj = {};
+  WD_KEYS.forEach(dk=> obj[dk] = false);
+  return obj;
+}
 
 function blankMeeting(){
   return {
     id: uid(),
     date: todayStr(),
     menu: { ingredients:'', shopping:'', notes:'', days: emptyDays(['lunch','dinner']) },
-    plan: { days: emptyDays(['jihyun','hyeonje']), monthlyPlan: '' },
+    plan: { days: emptyDays(['jihyun','hyeonje']), merged: emptyBoolDays(), todos: [] },
     finance: { review:'', wishlist:[], investReview:'' },
     happiness: { me:{score:5,good:'',wish:''}, partner:{score:5,good:'',wish:''} },
     travel: { items: [] },
@@ -576,7 +595,7 @@ function dayHasAny(daysObj, rowKeys){
 
 function hasContent(m, cat){
   if(cat==='menu') return !!(m.menu.ingredients.trim() || m.menu.shopping.trim() || m.menu.notes.trim() || dayHasAny(m.menu.days, ['morning','lunch','dinner']));
-  if(cat==='plan') return dayHasAny(m.plan.days, ['jihyun','hyeonje']);
+  if(cat==='plan') return dayHasAny(m.plan.days, ['jihyun','hyeonje']) || (m.plan.todos && m.plan.todos.length>0);
   if(cat==='finance') return !!(m.finance.review.trim() || m.finance.investReview.trim() || m.finance.wishlist.length);
   if(cat==='happy') return !!(m.happiness.me.good.trim()||m.happiness.me.wish.trim()||m.happiness.partner.good.trim()||m.happiness.partner.wish.trim());
   if(cat==='travel') return m.travel.items.length>0;
@@ -659,7 +678,9 @@ function createMeeting(sourceId){
         .filter(a=>!a.done)
         .map(a=>({ id: uid(), text: a.text, done: a.done }))
     }));
-    m.plan.monthlyPlan = prev.plan.monthlyPlan;
+    m.plan.todos = (prev.plan.todos||[])
+      .filter(t=>!t.done)
+      .map(t=>({ id: uid(), text: t.text, done: false }));
     m.menu.ingredients = prev.menu.ingredients;
     m.menu.notes = prev.menu.notes;
     m.finance.wishlist = prev.finance.wishlist
@@ -677,6 +698,7 @@ function createMeeting(sourceId){
 function openDetail(id, tab){
   currentId = id;
   activeTab = tab || 'plan';
+  calViewYear = null; calViewMonth = null;
   document.getElementById('homeView').style.display = 'none';
   document.getElementById('detailView').style.display = 'block';
   const m = findMeeting(id);
@@ -754,18 +776,20 @@ function renderPanel(){
   if(activeTab==='plan'){
     wrap.innerHTML = `
       <div class="panel" style="--accent:${color}">
-        <div class="p-title">🗓️ 주간 계획</div>
-        <div class="p-sub">요일별로 각자의 한 주 계획을 적어보세요.</div>
+        <div class="p-title">🗓️ 계획</div>
+        <div class="p-sub">이번 달 할 일과 다음 주 계획을 함께 정리해요.</div>
 
         <div class="plan-top">
           ${renderMiniCalendar(m.date)}
           <div class="monthly-plan">
-            <div class="field-label">월별 계획</div>
-            <textarea placeholder="이번 달 계획을 적어보세요..." onchange="m_updatePlanMonthly(this.value)">${esc(m.plan.monthlyPlan)}</textarea>
+            <div class="field-label">To-do</div>
+            <div id="planTodoList">${renderPlanTodos(m.plan.todos)}</div>
+            <button class="line-add" style="color:${color}" onclick="planTodoAdd()">+ 할 일 추가</button>
           </div>
         </div>
 
-        ${renderWeekTable(m.plan.days, PLAN_ROWS, 'planDayUpdate', 'list')}
+        <div class="field-label">주간 계획</div>
+        ${renderPlanWeekTable(m)}
       </div>
     `;
     wrap.querySelectorAll('.plan-cell').forEach(autoGrowPlan);
@@ -919,9 +943,15 @@ function getSunday(dateInput){
 }
 function sameDate(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
 
-function computeWeekLabel(meetingDateStr){
+function getHighlightRange(meetingDateStr){
   const meetingMonday = getMonday(meetingDateStr + 'T00:00:00');
   const hlStart = new Date(meetingMonday); hlStart.setDate(hlStart.getDate()+7);
+  const hlEnd = new Date(hlStart); hlEnd.setDate(hlEnd.getDate()+6);
+  return {hlStart, hlEnd};
+}
+
+function computeWeekLabel(meetingDateStr){
+  const {hlStart} = getHighlightRange(meetingDateStr);
   const calYear = hlStart.getFullYear();
   const calMonth = hlStart.getMonth();
   const firstOfMonth = new Date(calYear, calMonth, 1);
@@ -932,14 +962,27 @@ function computeWeekLabel(meetingDateStr){
 }
 
 const WD_CAL = ['일','월','화','수','목','금','토'];
+let calViewYear = null;
+let calViewMonth = null;
+
+function calPrevMonth(){
+  if(calViewMonth===0){ calViewMonth=11; calViewYear--; } else calViewMonth--;
+  renderPanel();
+}
+function calNextMonth(){
+  if(calViewMonth===11){ calViewMonth=0; calViewYear++; } else calViewMonth++;
+  renderPanel();
+}
 
 function renderMiniCalendar(meetingDateStr){
-  const meetingMonday = getMonday(meetingDateStr + 'T00:00:00');
-  const hlStart = new Date(meetingMonday); hlStart.setDate(hlStart.getDate()+7);
-  const hlEnd = new Date(hlStart); hlEnd.setDate(hlEnd.getDate()+6);
+  const {hlStart, hlEnd} = getHighlightRange(meetingDateStr);
 
-  const calYear = hlStart.getFullYear();
-  const calMonth = hlStart.getMonth();
+  if(calViewYear===null || calViewMonth===null){
+    calViewYear = hlStart.getFullYear();
+    calViewMonth = hlStart.getMonth();
+  }
+  const calYear = calViewYear;
+  const calMonth = calViewMonth;
   const firstOfMonth = new Date(calYear, calMonth, 1);
   const lastOfMonth = new Date(calYear, calMonth+1, 0);
   const gridStart = getSunday(firstOfMonth);
@@ -966,7 +1009,11 @@ function renderMiniCalendar(meetingDateStr){
 
   return `
     <div class="mini-cal">
-      <div class="mini-cal-title">${calYear}년 ${calMonth+1}월</div>
+      <div class="mini-cal-title">
+        <button class="cal-nav" onclick="calPrevMonth()">‹</button>
+        <span>${calYear}년 ${calMonth+1}월</span>
+        <button class="cal-nav" onclick="calNextMonth()">›</button>
+      </div>
       <table class="mini-cal-table">
         <thead><tr>${headerCells}</tr></thead>
         <tbody>${bodyRows}</tbody>
@@ -975,7 +1022,103 @@ function renderMiniCalendar(meetingDateStr){
   `;
 }
 
-function m_updatePlanMonthly(val){ findMeeting(currentId).plan.monthlyPlan = val; queueSave(); }
+function renderPlanTodos(items){
+  if(!items || items.length===0) return '';
+  return items.map(t=>`
+    <div class="act-item ${t.done?'done':''}">
+      <input type="checkbox" ${t.done?'checked':''} onchange="planTodoUpdate('${t.id}','done', this.checked)">
+      <input type="text" placeholder="할 일" value="${escAttr(t.text)}" onchange="planTodoUpdate('${t.id}','text', this.value)">
+      <button class="line-del" onclick="planTodoDel('${t.id}')">×</button>
+    </div>
+  `).join('');
+}
+function planTodoAdd(){
+  const m = findMeeting(currentId);
+  if(!m.plan.todos) m.plan.todos = [];
+  m.plan.todos.push({id:uid(), text:'', done:false});
+  renderPanel(); queueSave();
+}
+function planTodoUpdate(id, field, val){
+  const m = findMeeting(currentId);
+  const t = m.plan.todos.find(x=>x.id===id);
+  t[field]=val;
+  if(field==='done') renderPanel();
+  queueSave();
+}
+function planTodoDel(id){
+  const m = findMeeting(currentId);
+  m.plan.todos = m.plan.todos.filter(x=>x.id!==id);
+  renderPanel(); queueSave();
+}
+
+function renderPlanWeekTable(m){
+  if(!m.plan.merged) m.plan.merged = emptyBoolDays();
+  const {hlStart} = getHighlightRange(m.date);
+
+  const headerCells = PLAN_ROWS.map(r=>`<th>${r.label}</th>`).join('');
+  const bodyRows = WD_KEYS.map((dk,i)=>{
+    const d = new Date(hlStart); d.setDate(d.getDate()+i);
+    const label = `
+      <button class="day-btn" onclick="togglePlanMerge('${dk}')">
+        <span class="rl-date">${d.getMonth()+1}/${d.getDate()}</span>
+        <span class="rl-wd">${WD[i]}</span>
+      </button>
+    `;
+    const day = m.plan.days[dk];
+    let cellsHtml;
+    if(m.plan.merged[dk]){
+      cellsHtml = `
+        <td colspan="2">
+          <textarea class="plan-cell" rows="1"
+            oninput="autoGrowPlan(this); planDayUpdate('${dk}','jihyun', this.value)">${esc(day.jihyun)}</textarea>
+        </td>
+      `;
+    }else{
+      cellsHtml = `
+        <td>
+          <textarea class="plan-cell" rows="1"
+            oninput="autoGrowPlan(this); planDayUpdate('${dk}','jihyun', this.value)">${esc(day.jihyun)}</textarea>
+        </td>
+        <td>
+          <textarea class="plan-cell" rows="1"
+            oninput="autoGrowPlan(this); planDayUpdate('${dk}','hyeonje', this.value)">${esc(day.hyeonje)}</textarea>
+        </td>
+      `;
+    }
+    return `<tr><td class="rowlabel">${label}</td>${cellsHtml}</tr>`;
+  }).join('');
+
+  return `<div class="week-wrap"><table class="week-table"><thead><tr><th></th>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+}
+
+function togglePlanMerge(dayKey){
+  const m = findMeeting(currentId);
+  if(!m.plan.merged) m.plan.merged = emptyBoolDays();
+  const day = m.plan.days[dayKey];
+  const isMerged = !!m.plan.merged[dayKey];
+
+  if(!isMerged){
+    const parts = [];
+    if(day.jihyun) parts.push(day.jihyun);
+    if(day.hyeonje) parts.push(day.hyeonje);
+    day.jihyun = parts.join('\n');
+    day.hyeonje = '';
+    m.plan.merged[dayKey] = true;
+  }else{
+    const text = day.jihyun || '';
+    const idx = text.indexOf('\n');
+    if(idx === -1){
+      day.jihyun = text;
+      day.hyeonje = '';
+    }else{
+      day.jihyun = text.slice(0, idx);
+      day.hyeonje = text.slice(idx+1);
+    }
+    m.plan.merged[dayKey] = false;
+  }
+  queueSave();
+  renderPanel();
+}
 
 function m_updateMenuField(field, v){ findMeeting(currentId).menu[field]=v; queueSave(); }
 
@@ -1046,6 +1189,7 @@ document.getElementById('deleteBtn').addEventListener('click', ()=>{
 document.getElementById('dateInput').addEventListener('change', (e)=>{
   findMeeting(currentId).date = e.target.value;
   queueSave();
+  calViewYear = null; calViewMonth = null;
   if(activeTab==='plan') renderPanel();
 });
 document.getElementById('monthFilter').addEventListener('change', (e)=>{
