@@ -561,17 +561,31 @@ function loadMeetings(){
   }, (err)=>{ console.error('불러오기 실패', err); });
 }
 
+async function doSave(){
+  try{
+    await docRef.set({ value: JSON.stringify(meetings) });
+    const ind = document.getElementById('saveIndicator');
+    ind.classList.add('show');
+    setTimeout(()=>ind.classList.remove('show'), 1100);
+  }catch(e){ console.error('저장 실패', e); }
+}
+
 function queueSave(){
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(async ()=>{
-    try{
-      await docRef.set({ value: JSON.stringify(meetings) });
-      const ind = document.getElementById('saveIndicator');
-      ind.classList.add('show');
-      setTimeout(()=>ind.classList.remove('show'), 1100);
-    }catch(e){ console.error('저장 실패', e); }
-  }, 450);
+  saveTimer = setTimeout(doSave, 450);
 }
+
+function flushSave(){
+  if(!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  doSave();
+}
+
+// 새로고침/탭 닫기/화면 전환 직전에 디바운스 중이던 저장을 즉시 실행해
+// 방금 추가/수정한 내용이 반영되기 전에 사라지는 것을 막는다.
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'hidden') flushSave(); });
+window.addEventListener('pagehide', flushSave);
 
 function findMeeting(id){ return meetings.find(m=>m.id===id); }
 function esc(str){ return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
