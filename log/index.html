@@ -500,6 +500,12 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+// 오프라인 캐시(IndexedDB)를 켜서, set()이 네트워크 응답을 기다리지 않고도
+// 로컬에 즉시 기록되게 한다. 새로고침/탭 닫기 중 네트워크 요청이 끊겨도
+// 다음 로드 때 대기 중인 쓰기가 자동으로 이어서 서버에 반영된다.
+db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+  console.warn('오프라인 캐시 활성화 실패:', err.code);
+});
 const docRef = db.collection('storage').doc(STORAGE_KEY);
 
 let meetings = [];
