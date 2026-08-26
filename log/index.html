@@ -240,6 +240,7 @@
   }
   textarea{resize:vertical; min-height:70px; line-height:1.6;}
   textarea:focus, input:focus{outline:none; border-color:var(--accent, var(--primary));}
+  textarea.autosize{resize:none; overflow:hidden;}
 
   /* ===== weekly table (menu / plan) ===== */
   .week-wrap{overflow-x:auto; margin-bottom:6px; border-radius:12px;}
@@ -790,6 +791,11 @@ function autoGrowPlan(ta){
   cells.forEach(c=>{ c.style.height = max + 'px'; });
 }
 
+function autoGrow(ta){
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
 function renderPanel(){
   const m = findMeeting(currentId);
   const wrap = document.getElementById('panelWrap');
@@ -802,7 +808,7 @@ function renderPanel(){
         <div class="p-sub">식재료부터 끼니별 메뉴까지 한 번에 정리해요.</div>
 
         <div class="field-label">식재료</div>
-        <textarea placeholder="냉장고에 있는 재료, 필요한 재료..." onchange="m_updateMenuField('ingredients', this.value)">${esc(m.menu.ingredients)}</textarea>
+        <textarea class="autosize" placeholder="냉장고에 있는 재료, 필요한 재료..." oninput="autoGrow(this)" onchange="m_updateMenuField('ingredients', this.value)">${esc(m.menu.ingredients)}</textarea>
 
         <div class="field-label">주간 식단표</div>
         ${renderMergeableWeekTable(m, 'menu')}
@@ -826,7 +832,7 @@ function renderPanel(){
           </div>
         </div>
 
-        <textarea placeholder="메모를 남겨보세요..." onchange="m_updatePlanMemo(this.value)">${esc(m.plan.memo)}</textarea>
+        <textarea class="autosize" placeholder="메모를 남겨보세요..." oninput="autoGrow(this)" onchange="m_updatePlanMemo(this.value)">${esc(m.plan.memo)}</textarea>
 
         <div class="field-label">주간 계획</div>
         ${renderMergeableWeekTable(m, 'plan')}
@@ -842,10 +848,10 @@ function renderPanel(){
         <div class="p-sub">지출과 투자를 점검하고, 위시리스트를 확인해요.</div>
 
         <div class="field-label">지출 점검</div>
-        <textarea placeholder="지난주/지난달 지출을 점검하며..." onchange="m_updateFinance('review', this.value)">${esc(m.finance.review)}</textarea>
+        <textarea class="autosize" placeholder="지난주/지난달 지출을 점검하며..." oninput="autoGrow(this)" onchange="m_updateFinance('review', this.value)">${esc(m.finance.review)}</textarea>
 
         <div class="field-label">투자 점검</div>
-        <textarea placeholder="투자 현황을 점검해보세요..." onchange="m_updateFinance('investReview', this.value)">${esc(m.finance.investReview)}</textarea>
+        <textarea class="autosize" placeholder="투자 현황을 점검해보세요..." oninput="autoGrow(this)" onchange="m_updateFinance('investReview', this.value)">${esc(m.finance.investReview)}</textarea>
 
         <div class="field-label">위시리스트</div>
         <div id="wishlist">${renderWishlist(m.finance.wishlist)}</div>
@@ -886,6 +892,8 @@ function renderPanel(){
       </div>
     `;
   }
+
+  wrap.querySelectorAll('textarea.autosize').forEach(autoGrow);
 }
 
 function renderPerson(key,label){
@@ -899,9 +907,9 @@ function renderPerson(key,label){
         ${renderHearts(key, p.hearts)}
       </div>
       <div class="field-label">고마워요</div>
-      <textarea placeholder="요즘 고마웠던 순간..." onchange="h_field('${key}','good', this.value)">${esc(p.good)}</textarea>
+      <textarea class="autosize" placeholder="요즘 고마웠던 순간..." oninput="autoGrow(this)" onchange="h_field('${key}','good', this.value)">${esc(p.good)}</textarea>
       <div class="field-label">부탁해요</div>
-      <textarea placeholder="앞으로 바라는 것..." onchange="h_field('${key}','wish', this.value)">${esc(p.wish)}</textarea>
+      <textarea class="autosize" placeholder="앞으로 바라는 것..." oninput="autoGrow(this)" onchange="h_field('${key}','wish', this.value)">${esc(p.wish)}</textarea>
     </div>
   `;
 }
@@ -934,7 +942,7 @@ function renderTravelItems(items){
         <input type="text" placeholder="언제 (예: 2026년 9월)" value="${escAttr(it.when)}" onchange="travelUpdate('${it.id}','when', this.value)">
         <input type="text" placeholder="어디로" value="${escAttr(it.where)}" onchange="travelUpdate('${it.id}','where', this.value)">
       </div>
-      <textarea placeholder="내용을 적어보세요..." onchange="travelUpdate('${it.id}','content', this.value)">${esc(it.content)}</textarea>
+      <textarea class="autosize" placeholder="내용을 적어보세요..." oninput="autoGrow(this)" onchange="travelUpdate('${it.id}','content', this.value)">${esc(it.content)}</textarea>
       <div class="travel-actions">
         <button class="icon-btn" ${idx===0?'disabled':''} onclick="travelMove('${it.id}',-1)">↑</button>
         <button class="icon-btn" ${idx===items.length-1?'disabled':''} onclick="travelMove('${it.id}',1)">↓</button>
@@ -952,7 +960,7 @@ function renderGoals(list, color){
         <input type="text" placeholder="목표를 입력하세요" value="${escAttr(g.text)}" onchange="goalUpdate('${g.id}', this.value)">
         <button onclick="goalDel('${g.id}')">×</button>
       </div>
-      <textarea class="goal-desc" placeholder="목표에 대한 설명을 적어보세요..." onchange="goalDescUpdate('${g.id}', this.value)">${esc(g.desc||'')}</textarea>
+      <textarea class="goal-desc autosize" placeholder="목표에 대한 설명을 적어보세요..." oninput="autoGrow(this)" onchange="goalDescUpdate('${g.id}', this.value)">${esc(g.desc||'')}</textarea>
       <div class="goal-actions-label">Action Item</div>
       ${renderGoalActions(g)}
       <button class="line-add" style="color:${color}" onclick="goalActionAdd('${g.id}')">+ action item 추가</button>
