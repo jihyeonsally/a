@@ -903,10 +903,20 @@ function donutSegmentPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
   return `M ${so.x.toFixed(2)} ${so.y.toFixed(2)} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${eo.x.toFixed(2)} ${eo.y.toFixed(2)} L ${si.x.toFixed(2)} ${si.y.toFixed(2)} A ${rInner} ${rInner} 0 ${largeArc} 0 ${ei.x.toFixed(2)} ${ei.y.toFixed(2)} Z`;
 }
 
-function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, grandTotal, type) {
+function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, remainingShare) {
   const CX = 100, CY = 100, R_OUT = 72, R_IN = 44, LINE_R = 90, LINE_END_R = 80;
+  const hasRemaining = remainingShare > 0.001;
 
-  if (catsWithAmount.length === 1) {
+  if (catsWithAmount.length === 0 && hasRemaining) {
+    // 지출 없이 수입만 있는 달: 원 전체가 "남은 돈"
+    svg.innerHTML = `
+      <circle cx="${CX}" cy="${CY}" r="${R_OUT}" fill="var(--income-soft)" />
+      <circle cx="${CX}" cy="${CY}" r="${R_IN}" fill="var(--card)" />`;
+    calloutsEl.innerHTML = "";
+    return;
+  }
+
+  if (catsWithAmount.length === 1 && !hasRemaining) {
     const c = catsWithAmount[0];
     const tip = polarPoint(CX, CY, LINE_R, 0);
     const lineEnd = polarPoint(CX, CY, LINE_END_R, 0);
@@ -929,7 +939,7 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, grandTotal, t
   let callouts = "";
 
   catsWithAmount.forEach((c, i) => {
-    const share = totals[c.id] / grandTotal;
+    const share = totals[c.id] / denom;
     const sweep = share * 360;
     const start = angle;
     const end = angle + sweep;
@@ -968,6 +978,12 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, grandTotal, t
     }
   });
 
+  if (hasRemaining) {
+    const sweep = remainingShare * 360;
+    segParts += `<path d="${donutSegmentPath(CX, CY, R_OUT, R_IN, angle, angle + sweep)}" fill="var(--income-soft)" />`;
+    angle += sweep;
+  }
+
   svg.innerHTML = segParts + lineParts;
   calloutsEl.innerHTML = callouts;
 }
@@ -979,13 +995,28 @@ function renderDashboard() {
   const month = d.getMonth();
   document.getElementById("donutCenterLabel").textContent = `${month + 1}월`;
 
-  let filtered = state.dashEntries.filter(e => e.type === state.dashType);
-  if (state.currentLedger === "shared" && !state.dashPayerFilter.has("all")) {
-    filtered = filtered.filter(e => state.dashPayerFilter.has(e.payer));
-  }
+  const applyPayerFilter = (entries) => {
+    if (state.currentLedger === "shared" && !state.dashPayerFilter.has("all")) {
+      return entries.filter(e => state.dashPayerFilter.has(e.payer));
+    }
+    return entries;
+  };
 
+  const filtered = applyPayerFilter(state.dashEntries.filter(e => e.type === state.dashType));
   const totalAmount = filtered.reduce((sum, e) => sum + Number(e.amount), 0);
   document.getElementById("dashTotal").textContent = `${fmtNum(totalAmount)}원`;
+
+  // 지출 대시보드에서는 도넛의 100%가 "전체 수입"이 되도록, 남은 돈(수입-지출)을 별도 조각으로 채운다
+  let remainingShare = 0;
+  let donutDenom = totalAmount;
+  if (state.dashType === "expense") {
+    const totalIncomeSum = applyPayerFilter(state.dashEntries.filter(e => e.type === "income"))
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+    donutDenom = Math.max(totalIncomeSum, totalAmount);
+    if (donutDenom > 0) {
+      remainingShare = Math.max(0, totalIncomeSum - totalAmount) / donutDenom;
+    }
+  }
 
   const cats = CATEGORIES[state.dashType];
   const totals = {};
@@ -1002,14 +1033,13 @@ function renderDashboard() {
   const calloutsEl = document.getElementById("donutCallouts");
   const emptyMsg = document.getElementById("dashEmpty");
 
-  if (catsWithAmount.length === 0) {
+  if (catsWithAmount.length === 0 && remainingShare <= 0.001) {
     emptyMsg.style.display = "block";
     chartEl.innerHTML = "";
     calloutsEl.innerHTML = "";
   } else {
     emptyMsg.style.display = "none";
-    const grandTotal = catsWithAmount.reduce((sum, c) => sum + totals[c.id], 0);
-    renderDonutChart(chartEl, calloutsEl, catsWithAmount, totals, grandTotal, state.dashType);
+    renderDonutChart(chartEl, calloutsEl, catsWithAmount, totals, donutDenom, state.dashType, remainingShare);
   }
 
   const sign = state.dashType === "expense" ? "-" : "+";
