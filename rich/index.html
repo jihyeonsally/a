@@ -487,8 +487,10 @@
       <div class="field-label">날짜</div>
       <input type="date" id="dateInput" />
 
-      <div class="field-label">어느 가계부에 추가할까요?</div>
-      <div class="chip-row" id="targetLedgerChips"></div>
+      <div id="targetLedgerWrap">
+        <div class="field-label">어느 가계부에 추가할까요?</div>
+        <div class="chip-row" id="targetLedgerChips"></div>
+      </div>
 
       <div id="payerFieldWrap">
         <div class="field-label">결제자</div>
@@ -584,10 +586,32 @@ const CATEGORIES_SHARED = {
   income: INCOME_CATEGORIES,
 };
 
-// 지현/현제 개인 가계부 카테고리
-const CATEGORIES_PERSONAL = {
+// 지현 개인 가계부 카테고리
+const CATEGORIES_JIHYEON = {
   expense: [
-    { id: "groceries",    label: "식료품",     icon: "🥦", color: "#C1553F" },
+    { id: "dining",       label: "외식/배달",  icon: "🍽️", color: "#E08A5B" },
+    { id: "cafe",         label: "카페",       icon: "☕", color: "#B8896A" },
+    { id: "convenience",  label: "편의점",     icon: "🏪", color: "#D9A257" },
+    { id: "shopping",     label: "쇼핑",       icon: "🛍️", color: "#C97B9B" },
+    { id: "beauty",       label: "미용",       icon: "💄", color: "#D98BB0" },
+    { id: "daily",        label: "생필품",     icon: "🧴", color: "#8FA37E" },
+    { id: "medical",      label: "병원/약",    icon: "💊", color: "#B95C5C" },
+    { id: "transit",      label: "교통비",     icon: "🚌", color: "#6B8CAE" },
+    { id: "subscription", label: "구독료",     icon: "📺", color: "#9B7EC9" },
+    { id: "dues",         label: "회비",       icon: "🧾", color: "#8E7CC3" },
+    { id: "event",        label: "경조사",     icon: "🎁", color: "#C9974A" },
+    { id: "gift",         label: "선물",       icon: "🎀", color: "#E0A9BE" },
+    { id: "culture",      label: "문화생활",   icon: "🎬", color: "#7EAFC4" },
+    { id: "education",    label: "교육",       icon: "📚", color: "#6FA8A0" },
+    { id: "travel",       label: "여행",       icon: "✈️", color: "#5B9BD5" },
+  ],
+  income: INCOME_CATEGORIES,
+};
+
+// 현제 개인 가계부 카테고리 (식료품 대신 점심)
+const CATEGORIES_HYEONJE = {
+  expense: [
+    { id: "lunch",        label: "점심",       icon: "🍱", color: "#C1553F" },
     { id: "dining",       label: "외식/배달",  icon: "🍽️", color: "#E08A5B" },
     { id: "cafe",         label: "카페",       icon: "☕", color: "#B8896A" },
     { id: "convenience",  label: "편의점",     icon: "🏪", color: "#D9A257" },
@@ -608,7 +632,9 @@ const CATEGORIES_PERSONAL = {
 };
 
 function categoriesForLedger(ledgerId) {
-  return ledgerId === "shared" ? CATEGORIES_SHARED : CATEGORIES_PERSONAL;
+  if (ledgerId === "shared") return CATEGORIES_SHARED;
+  if (ledgerId === "hyeonje") return CATEGORIES_HYEONJE;
+  return CATEGORIES_JIHYEON;
 }
 
 // 임의 카테고리 추가 기능(테스트용 "하이" 포함)에서 남은 localStorage 데이터 정리
@@ -1181,7 +1207,7 @@ function openModal(dateStr, preset) {
   state.modalType = "expense";
   state.modalTargetLedger = state.currentLedger;
   state.modalPayer = "shared";
-  state.modalCategory = (preset && preset.category) || null;
+  state.modalCategory = (preset && preset.category) || (state.modalTargetLedger === "shared" ? "groceries" : null);
   state.modalMemo = (preset && preset.memo) || "";
 
   amountInput.value = (preset && preset.amount) ? Number(preset.amount).toLocaleString("ko-KR") : "";
@@ -1274,6 +1300,9 @@ document.getElementById("payerChips").addEventListener("click", (e) => {
 });
 
 function renderTargetLedgerChips() {
+  const wrap = document.getElementById("targetLedgerWrap");
+  wrap.style.display = state.modalTargetLedger === "shared" ? "block" : "none";
+
   const el = document.getElementById("targetLedgerChips");
   el.innerHTML = LEDGERS.map(l => `
     <button class="chip ${l.id === state.modalTargetLedger ? "active" : ""}" data-ledger="${l.id}">${l.label.replace(" 가계부","")}</button>
@@ -1281,7 +1310,7 @@ function renderTargetLedgerChips() {
   el.querySelectorAll(".chip").forEach(chip => {
     chip.addEventListener("click", () => {
       state.modalTargetLedger = chip.dataset.ledger;
-      state.modalCategory = null;
+      state.modalCategory = chip.dataset.ledger === "shared" ? "groceries" : null;
       el.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
       chip.classList.add("active");
       updatePayerFieldVisibility();
