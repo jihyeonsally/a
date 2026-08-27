@@ -220,6 +220,8 @@
   .payer-nav-row .navbtns{ display:flex; align-items:center; gap:4px; flex-shrink:0; margin-left:auto; }
   #payerFilter.chip-row{ gap:6px; }
   #payerFilter .chip{ padding:6px 12px; font-size:12px; }
+  #quickAddRow.chip-row{ gap:6px; }
+  #quickAddRow .chip{ padding:6px 12px; font-size:12px; }
 
   .dash-card{
     margin: 0 16px 16px;
@@ -424,6 +426,13 @@
         <button class="chip" data-payer="jihyeon">지현</button>
         <button class="chip" data-payer="hyeonje">현제</button>
         <button class="chip" data-payer="shared">우리</button>
+      </div>
+      <div class="chip-row quick-add-row" id="quickAddRow" style="display:none;">
+        <button class="chip" data-quick-cat="transit" data-quick-memo="스윙">🚲 스윙</button>
+        <button class="chip" data-quick-cat="cafe">☕ 카페</button>
+        <button class="chip" data-quick-cat="shopping">🛍️ 쇼핑</button>
+        <button class="chip" data-quick-cat="dining">🍽️ 외식</button>
+        <button class="chip" data-quick-cat="dues">🧾 회비</button>
       </div>
       <div class="navbtns">
         <button class="navbtn" id="dashPrevMonth">‹</button>
@@ -898,15 +907,24 @@ document.getElementById("dashNextMonth").addEventListener("click", () => {
 
 function renderPayerFilter() {
   const wrap = document.getElementById("payerFilter");
+  const quickAddRow = document.getElementById("quickAddRow");
   if (state.currentLedger !== "shared") {
     wrap.style.display = "none";
+    quickAddRow.style.display = "flex";
     return;
   }
+  quickAddRow.style.display = "none";
   wrap.style.display = "flex";
   wrap.querySelectorAll(".chip").forEach(chip => {
     chip.classList.toggle("active", state.dashPayerFilter.has(chip.dataset.payer));
   });
 }
+
+document.getElementById("quickAddRow").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  openModal(ymd(new Date()), { category: chip.dataset.quickCat, memo: chip.dataset.quickMemo || "" });
+});
 
 document.getElementById("payerFilter").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
@@ -1149,16 +1167,16 @@ const saveBtn = document.getElementById("saveBtn");
 const sheetTitle = document.getElementById("sheetTitle");
 const deleteEntryBtn = document.getElementById("deleteEntryBtn");
 
-function openModal(dateStr) {
+function openModal(dateStr, preset) {
   state.editingEntry = null;
   state.modalType = "expense";
   state.modalTargetLedger = state.currentLedger;
   state.modalPayer = "shared";
-  state.modalCategory = null;
-  state.modalMemo = "";
+  state.modalCategory = (preset && preset.category) || null;
+  state.modalMemo = (preset && preset.memo) || "";
 
   amountInput.value = "";
-  memoInput.value = "";
+  memoInput.value = state.modalMemo;
   dateInput.value = dateStr || ymd(new Date());
 
   document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === "expense"));
@@ -1172,6 +1190,7 @@ function openModal(dateStr) {
   renderCategoryChips();
   updateSaveEnabled();
   overlay.classList.add("show");
+  amountInput.focus();
 }
 
 function openEditModal(entry, ledgerId) {
