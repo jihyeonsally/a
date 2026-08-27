@@ -224,9 +224,10 @@
   .dash-card{
     margin: 0 16px 16px;
     background: var(--card); border:1px solid var(--border); border-radius: var(--radius);
-    padding: 5px; box-shadow: var(--shadow);
+    padding: 16px; box-shadow: var(--shadow);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
   }
-  .chart-wrap{ width:100%; max-width:220px; margin:0 auto 8px; }
+  .chart-wrap{ width:100%; max-width:220px; margin:0 auto; }
   .donut-wrap{ position:relative; }
   .donut-wrap svg{ width:100%; height:auto; display:block; }
   .donut-callouts{ position:absolute; inset:0; pointer-events:none; }
@@ -267,7 +268,6 @@
   .cat-entry-row:hover .entry-memo{ color: var(--accent); }
   .cat-entry-row .search-date{ width:42px; flex-shrink:0; color: var(--text); }
   .cat-entry-row .entry-memo{ flex:1; color: var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .cat-entry-row .entry-memo .no-memo{ color: var(--text-dim); }
   .cat-entry-row .amt{ font-weight:600; font-size:13px; }
   .cat-entry-row .amt.expense{ color: var(--expense); }
   .cat-entry-row .amt.income{ color: var(--income); }
@@ -1102,7 +1102,7 @@ function renderDashboard() {
 
     const entriesHtml = entries.map(e => {
       const dateLabel = dayWithWeekday(e.date);
-      const memoHtml = e.memo ? escapeHtml(e.memo) : `<span class="no-memo">메모 없음</span>`;
+      const memoHtml = e.memo ? escapeHtml(e.memo) : "";
       return `
         <div class="cat-entry-row" data-id="${e.id}">
           <span class="search-date mono">${dateLabel}</span>
