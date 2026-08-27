@@ -164,6 +164,7 @@
   .day-detail-row:hover{ border-color: var(--accent); }
   .day-detail-row .icon{ font-size:16px; width:24px; text-align:center; }
   .day-detail-row .name{ flex:1; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .day-detail-row .entry-memo-inline{ font-size:12px; font-weight:400; color: var(--text-dim); }
   .day-detail-row .amt{ font-weight:700; font-size:14px; }
   .day-detail-row .amt.expense{ color: var(--expense); }
   .day-detail-row .amt.income{ color: var(--income); }
@@ -753,7 +754,8 @@ function renderDayDetail() {
   panel.style.display = "block";
 
   const [y, m, d] = state.selectedDate.split("-");
-  document.getElementById("dayDetailTitle").textContent = `${Number(m)}월 ${Number(d)}일 내역`;
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][new Date(Number(y), Number(m) - 1, Number(d)).getDay()];
+  document.getElementById("dayDetailTitle").textContent = `${Number(m)}월 ${Number(d)}일 (${wd}) 내역`;
 
   const dayEntries = state.calEntries
     .filter(e => e.date === state.selectedDate)
@@ -773,7 +775,7 @@ function renderDayDetail() {
     return `
       <div class="day-detail-row" data-id="${e.id}">
         <span class="icon">${icon}</span>
-        <span class="name">${name}${e.memo ? ` · ${escapeHtml(e.memo)}` : ""}</span>
+        <span class="name">${name}${e.memo ? ` <span class="entry-memo-inline">· ${escapeHtml(e.memo)}</span>` : ""}</span>
         <span class="amt ${e.type}">${sign}${fmtNum(e.amount)}원</span>
       </div>`;
   }).join("");
@@ -1345,7 +1347,7 @@ function renderSearchResults() {
       <div class="day-detail-row">
         <span class="search-date mono">${dateLabel}</span>
         <span class="icon">${icon}</span>
-        <span class="name">${name}${e.memo ? ` · ${escapeHtml(e.memo)}` : ""}</span>
+        <span class="name">${name}${e.memo ? ` <span class="entry-memo-inline">· ${escapeHtml(e.memo)}</span>` : ""}</span>
         <span class="amt ${e.type}">${sign}${fmtNum(e.amount)}원</span>
       </div>`;
   }).join("");
