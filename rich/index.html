@@ -41,7 +41,7 @@
   }
   .mono{ font-family: "Space Mono", monospace; }
   #app{
-    max-width: 480px;
+    max-width: 640px;
     margin: 0 auto;
     min-height: 100vh;
     background: var(--bg);
@@ -168,20 +168,20 @@
 
   /* ---------- FAB ---------- */
   .fab{
-    position: fixed; bottom: 92px; right: calc(50% - 240px + 20px);
+    position: fixed; bottom: 92px; right: calc(50% - 320px + 20px);
     width:56px; height:56px; border-radius:50%;
     background: var(--accent); color:#fff; border:none;
     font-size:26px; box-shadow: 0 6px 16px rgba(62,192,212,0.4);
     cursor:pointer; z-index: 25; display:flex; align-items:center; justify-content:center;
   }
-  @media (max-width:520px){
+  @media (max-width:680px){
     .fab{ right: 20px; }
   }
 
   /* ---------- Bottom tab bar ---------- */
   .tabbar{
     position: fixed; bottom:0; left:50%; transform: translateX(-50%);
-    width:100%; max-width:480px;
+    width:100%; max-width:640px;
     background: var(--card);
     border-top: 1px solid var(--border);
     display:flex; z-index: 20;
@@ -280,7 +280,7 @@
   }
   .overlay.show{ display:flex; }
   .sheet{
-    background: var(--bg); width:100%; max-width:480px;
+    background: var(--bg); width:100%; max-width:640px;
     border-radius: 24px 24px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
     max-height: 90vh; overflow-y:auto;
   }
