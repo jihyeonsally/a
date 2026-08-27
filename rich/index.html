@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>지현제 가계부</title>
+<link rel="icon" type="image/png" href="icons/icon-32.png" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --bg: #E7F7F8;
+    --card: #FFFFFF;
+    --text: #1F2E2A;
+    --text-dim: #6B9086;
+    --accent: #3EC0D4;
+    --accent-soft: #D8F5F1;
+    --expense: #C93F6E;
+    --expense-soft: #FBD9E3;
+    --income: #2F9E75;
+    --income-soft: #D9F0E3;
+    --border: #D4EFE6;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow: 0 2px 8px rgba(31,46,42,0.06);
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans KR", -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono{ font-family: "Space Mono", monospace; }
+  #app{
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: var(--bg);
+    position: relative;
+    padding-bottom: 84px;
+  }
+
+  /* ---------- Top ledger switcher ---------- */
+  .topbar{
+    position: sticky; top:0; z-index: 20;
+    background: var(--bg);
+    padding: 16px 16px 10px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .site-title-wrap{ display:flex; align-items:center; gap:8px; min-width:0; }
+  .site-title-icon{ width:28px; height:28px; object-fit:contain; flex-shrink:0; }
+  .site-title{ font-size:16px; font-weight:700; color: var(--text); white-space:nowrap; letter-spacing:0.4px; }
+  .ledger-toggle{
+    display:flex; gap:4px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px;
+    width: fit-content;
+    flex-shrink:0;
+    box-shadow: var(--shadow);
+  }
+  .ledger-toggle-btn{
+    border:none; background:none; border-radius:999px;
+    padding: 9px 16px; font-family: inherit; font-weight:700; font-size:13px;
+    color: var(--text-dim); cursor:pointer; white-space:nowrap;
+  }
+  .ledger-toggle-btn.active{ background: var(--accent); color:#fff; }
+
+  /* ---------- Month summary ---------- */
+  .month-summary{ padding: 4px 16px 8px; }
+  .summary-top{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-bottom: 14px;
+  }
+  .summary-remaining{ font-size:24px; font-weight:700; color: var(--text); line-height:1.1; }
+  .search-btn{
+    width:36px; height:36px; border-radius:50%; border:1px solid var(--border);
+    background: var(--card); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:15px; flex-shrink:0;
+  }
+  .search-btn:hover{ background: var(--accent-soft); }
+  .summary-row{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; padding: 3px 0; font-size:15px; }
+  .summary-item{ display:flex; align-items:center; gap:6px; }
+  .summary-label{ font-weight:600; color: var(--text-dim); }
+  .summary-label.income{ color: var(--income); }
+  .summary-label.expense{ color: var(--expense); }
+  .summary-amt{ font-weight:600; color: var(--text-dim); }
+  .summary-amt.income{ color: var(--income); }
+  .summary-amt.expense{ color: var(--expense); }
+
+  /* ---------- Calendar screen ---------- */
+  .month-nav{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 4px 16px 16px;
+  }
+  .month-nav h2{ font-size: 16px; margin:0 0 0 4px; font-weight:700; line-height:1; }
+  .month-nav .navbtns{ display:flex; align-items:center; gap:4px; }
+  .navbtn{
+    width:32px; height:32px; border-radius:50%; border:1px solid var(--border);
+    background: var(--card); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:14px; line-height:1; color: var(--text); padding:0;
+  }
+  .navbtn:hover{ background: var(--accent-soft); }
+
+  .weekdays{
+    display:grid; grid-template-columns: repeat(7,1fr);
+    padding: 0 12px; margin-bottom: 4px;
+  }
+  .weekdays span{
+    text-align:center; font-size:11px; color: var(--text); font-weight:600;
+  }
+  .calendar-grid{
+    display:grid; grid-template-columns: repeat(7,1fr);
+    gap: 4px; padding: 0 12px;
+  }
+  .day-cell{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    min-height: 68px;
+    padding: 6px 5px;
+    cursor:pointer;
+    display:flex; flex-direction:column; gap:3px;
+    transition: border-color .1s;
+  }
+  .day-cell:hover{ border-color: var(--accent); }
+  .day-cell.empty{ background:transparent; border-color:transparent; cursor:default; }
+  .day-cell.today{ border-color: var(--accent); border-width:2px; }
+  .day-cell.selected{ background: var(--accent-soft); border-color: var(--accent); }
+  .day-num{ font-size:12px; font-weight:600; color: var(--text); }
+  .day-cell.today .day-num{ color: var(--accent); }
+  .day-entries{ display:flex; flex-direction:column; gap:2px; }
+  .day-line{
+    font-size:10px; line-height:1.3; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; font-weight:600;
+  }
+  .day-line.expense{ color: var(--expense); }
+  .day-line.income{ color: var(--income); }
+
+  /* ---------- Day detail panel ---------- */
+  .day-detail{ margin: 12px 16px 20px; }
+  .day-detail-title{ font-size:13px; font-weight:700; color: var(--text-dim); margin-bottom:8px; }
+  .day-detail-empty{
+    font-size:13px; color: var(--text-dim); padding: 18px 0; text-align:center;
+    background: var(--card); border:1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .day-detail-row{
+    display:flex; align-items:center; gap:10px;
+    background: var(--card); border:1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 12px 14px; margin-bottom:8px; cursor:pointer;
+  }
+  .day-detail-row:hover{ border-color: var(--accent); }
+  .day-detail-row .icon{ font-size:16px; width:24px; text-align:center; }
+  .day-detail-row .name{ flex:1; font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .day-detail-row .amt{ font-weight:700; font-size:14px; }
+  .day-detail-row .amt.expense{ color: var(--expense); }
+  .day-detail-row .amt.income{ color: var(--income); }
+
+  /* ---------- FAB ---------- */
+  .fab{
+    position: fixed; bottom: 92px; right: calc(50% - 240px + 20px);
+    width:56px; height:56px; border-radius:50%;
+    background: var(--accent); color:#fff; border:none;
+    font-size:26px; box-shadow: 0 6px 16px rgba(62,192,212,0.4);
+    cursor:pointer; z-index: 25; display:flex; align-items:center; justify-content:center;
+  }
+  @media (max-width:520px){
+    .fab{ right: 20px; }
+  }
+
+  /* ---------- Bottom tab bar ---------- */
+  .tabbar{
+    position: fixed; bottom:0; left:50%; transform: translateX(-50%);
+    width:100%; max-width:480px;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    display:flex; z-index: 20;
+  }
+  .tabbtn{
+    flex:1; border:none; background:none; padding: 12px 0 14px;
+    font-family: inherit; font-size: 12px; font-weight:600; color: var(--text-dim);
+    display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;
+  }
+  .tabbtn .icon{ font-size:18px; }
+  .tabbtn.active{ color: var(--accent); }
+
+  .screen{ display:none; }
+  .screen.active{ display:block; }
+
+  /* ---------- Dashboard ---------- */
+  .dash-toggle{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding: 4px 16px 18px;
+  }
+  .dash-total{ font-size:24px; font-weight:700; color: var(--text); line-height:1.1; }
+  .dash-type-toggle{
+    display:flex; gap:4px; background: var(--card); border:1px solid var(--border);
+    border-radius:999px; padding:4px; flex-shrink:0;
+  }
+  .dash-type-toggle button{
+    border:none; background:none; border-radius:999px; padding: 7px 14px;
+    font-family: inherit; font-weight:700; font-size:12px; color: var(--text-dim); cursor:pointer;
+  }
+  .dash-type-toggle button.active.expense{ background: var(--expense); color:#fff; }
+  .dash-type-toggle button.active.income{ background: var(--income); color:#fff; }
+
+  .payer-nav-row{
+    display:flex; align-items:center; gap:8px; padding: 0 16px 16px;
+  }
+  .payer-nav-row .navbtns{ display:flex; align-items:center; gap:4px; flex-shrink:0; margin-left:auto; }
+  #payerFilter.chip-row{ gap:6px; }
+  #payerFilter .chip{ padding:6px 12px; font-size:12px; }
+
+  .dash-card{
+    margin: 0 16px 16px;
+    background: var(--card); border:1px solid var(--border); border-radius: var(--radius);
+    padding: 5px; box-shadow: var(--shadow);
+  }
+  .chart-wrap{ width:100%; max-width:220px; margin:0 auto 8px; }
+  .donut-wrap{ position:relative; }
+  .donut-wrap svg{ width:100%; height:auto; display:block; }
+  .donut-callouts{ position:absolute; inset:0; pointer-events:none; }
+  .donut-center-label{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    font-family:"Space Mono", monospace; font-weight:700; font-size:15px;
+    color: var(--text); pointer-events:none;
+  }
+  .donut-callout{
+    position:absolute; transform:translate(-50%,-50%);
+    display:flex; align-items:center; gap:3px; white-space:nowrap;
+  }
+  .donut-callout .icon{ font-size:13px; }
+  .donut-callout .label{ font-size:10px; font-weight:600; color: var(--text); }
+  .dash-empty{ text-align:center; color: var(--text-dim); font-size:13px; padding: 24px 0; }
+
+  .cat-list{ margin: 0 16px; display:flex; flex-direction:column; gap:8px; }
+  .cat-row-wrap{
+    background: var(--card); border:1px solid var(--border); border-radius: var(--radius-sm);
+    overflow:hidden;
+  }
+  .cat-row{
+    display:flex; align-items:center; gap:10px; width:100%;
+    border:none; background:none; font-family:inherit; text-align:left;
+    padding: 12px 14px; cursor:pointer;
+  }
+  .cat-row .icon{ font-size:18px; width:26px; text-align:center; flex-shrink:0; }
+  .cat-row .name{ flex:1; font-size:14px; font-weight:600; color: var(--text); }
+  .cat-row .amt{ font-weight:700; font-size:14px; }
+  .cat-row .amt.expense{ color: var(--expense); }
+  .cat-row .amt.income{ color: var(--income); }
+  .cat-row .chevron{ font-size:10px; color: var(--text-dim); flex-shrink:0; }
+
+  .cat-entries{ border-top:1px solid var(--border); padding: 4px 14px 8px; }
+  .cat-entry-row{
+    display:flex; align-items:center; gap:10px; padding: 7px 0;
+    font-size:13px; cursor:pointer;
+  }
+  .cat-entry-row:hover .entry-memo{ color: var(--accent); }
+  .cat-entry-row .search-date{ width:42px; flex-shrink:0; color: var(--text); }
+  .cat-entry-row .entry-memo{ flex:1; color: var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cat-entry-row .entry-memo .no-memo{ color: var(--text-dim); }
+  .cat-entry-row .amt{ font-weight:600; font-size:13px; }
+  .cat-entry-row .amt.expense{ color: var(--expense); }
+  .cat-entry-row .amt.income{ color: var(--income); }
+
+  /* ---------- Modal ---------- */
+  .overlay{
+    position: fixed; inset:0; background: rgba(31,46,42,0.4);
+    display:none; align-items:flex-end; justify-content:center; z-index: 50;
+  }
+  .overlay.show{ display:flex; }
+  .sheet{
+    background: var(--bg); width:100%; max-width:480px;
+    border-radius: 24px 24px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+    max-height: 90vh; overflow-y:auto;
+  }
+  .sheet-handle{ width:36px; height:4px; background: var(--border); border-radius:2px; margin: 0 auto 16px; }
+  .sheet h3{ margin: 0 0 18px; font-size:17px; font-weight:700; text-align:center; }
+
+  .amount-input{
+    width:100%; border:none; background:none; text-align:center;
+    font-family:"Space Mono", monospace; font-size:40px; font-weight:700;
+    color: var(--text); padding: 8px 0 20px; outline:none;
+  }
+  .amount-input::placeholder{ color: var(--border); }
+
+  .segmented{ display:flex; gap:8px; margin-bottom:16px; }
+  .segmented button{
+    flex:1; padding:11px 0; border-radius:12px; border:1px solid var(--border);
+    background: var(--card); font-family:inherit; font-weight:700; font-size:14px;
+    color: var(--text-dim); cursor:pointer;
+  }
+  .segmented button.active.expense{ background: var(--expense-soft); color: var(--expense); border-color: var(--expense); }
+  .segmented button.active.income{ background: var(--income-soft); color: var(--income); border-color: var(--income); }
+
+  .field-label{ font-size:12px; font-weight:700; color: var(--text-dim); margin: 14px 0 8px; }
+
+  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    padding: 8px 13px; border-radius:999px; border:1px solid var(--border);
+    background: var(--card); font-family:inherit; font-size:13px; font-weight:600;
+    color: var(--text); cursor:pointer;
+  }
+  .chip.active{ background: var(--accent); color:#fff; border-color: var(--accent); }
+
+  input[type="date"], #memoInput, #searchInput{
+    width:100%; padding: 11px 13px; border-radius:12px; border:1px solid var(--border);
+    background: var(--card); font-family: inherit; font-size:14px; color: var(--text);
+    outline: none;
+  }
+  #memoInput::placeholder, #searchInput::placeholder{ color: var(--text-dim); }
+
+  /* ---------- Search sheet ---------- */
+  .search-results{ margin-top:16px; display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; }
+  .search-date{ font-size:11px; color: var(--text-dim); width:34px; flex-shrink:0; }
+
+  .save-btn{
+    width:100%; margin-top:22px; padding: 15px 0; border:none; border-radius:14px;
+    background: var(--accent); color:#fff; font-family:inherit; font-weight:700; font-size:15px;
+    cursor:pointer;
+  }
+  .save-btn:disabled{ background: var(--border); color: var(--text-dim); cursor:not-allowed; }
+  .delete-entry-btn{
+    width:100%; margin-top:10px; padding: 14px 0; border:1px solid var(--expense); border-radius:14px;
+    background: none; color: var(--expense); font-family:inherit; font-weight:700; font-size:14px;
+    cursor:pointer;
+  }
+  .delete-entry-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .close-btn{
+    position:absolute; top:16px; right:20px; border:none; background:none;
+    font-size:20px; color: var(--text-dim); cursor:pointer;
+  }
+  .sheet{ position:relative; }
+
+  .sync-badge{
+    position:fixed; top:10px; left:50%; transform:translateX(-50%);
+    background: var(--text); color:#fff; font-size:11px; padding:5px 12px;
+    border-radius:999px; opacity:0; pointer-events:none; transition: opacity .25s; z-index:60;
+  }
+  .sync-badge.show{ opacity:0.85; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div class="site-title-wrap">
+      <img src="icons/icon-64.png" class="site-title-icon" alt="" />
+      <span class="site-title">지현제네 가계부</span>
+    </div>
+    <div class="ledger-toggle" id="ledgerToggle">
+      <button class="ledger-toggle-btn" data-id="shared">공용</button>
+      <button class="ledger-toggle-btn" data-id="jihyeon">지현</button>
+      <button class="ledger-toggle-btn" data-id="hyeonje">현제</button>
+    </div>
+  </div>
+
+  <!-- Screen 1: Calendar -->
+  <div class="screen active" id="screen-calendar">
+    <div class="month-summary" id="monthSummary">
+      <div class="summary-top">
+        <span class="summary-remaining mono" id="summaryRemaining">0원</span>
+        <button class="search-btn" id="searchBtn" aria-label="메모 검색">🔍</button>
+      </div>
+      <div class="summary-row">
+        <span class="summary-item">
+          <span class="summary-label expense">- 지출</span>
+          <span class="summary-amt expense mono" id="summaryExpense">0원</span>
+        </span>
+        <span class="summary-item">
+          <span class="summary-label income">+ 수입</span>
+          <span class="summary-amt income mono" id="summaryIncome">0원</span>
+        </span>
+      </div>
+    </div>
+    <div class="month-nav">
+      <h2 id="monthLabel"></h2>
+      <div class="navbtns">
+        <button class="navbtn" id="prevMonth">‹</button>
+        <button class="navbtn" id="nextMonth">›</button>
+      </div>
+    </div>
+    <div class="weekdays">
+      <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+    </div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+
+    <div class="day-detail" id="dayDetail" style="display:none;">
+      <div class="day-detail-title" id="dayDetailTitle"></div>
+      <div id="dayDetailList"></div>
+    </div>
+  </div>
+
+  <!-- Screen 2: Dashboard -->
+  <div class="screen" id="screen-dashboard">
+    <div class="dash-toggle">
+      <span class="dash-total mono" id="dashTotal">0원</span>
+      <div class="dash-type-toggle">
+        <button id="dashExpenseBtn" class="active expense">지출</button>
+        <button id="dashIncomeBtn" class="income">수입</button>
+      </div>
+    </div>
+    <div class="payer-nav-row">
+      <div class="chip-row payer-filter" id="payerFilter" style="display:none;">
+        <button class="chip" data-payer="all">모두</button>
+        <button class="chip" data-payer="jihyeon">지현</button>
+        <button class="chip" data-payer="hyeonje">현제</button>
+        <button class="chip" data-payer="shared">우리</button>
+      </div>
+      <div class="navbtns">
+        <button class="navbtn" id="dashPrevMonth">‹</button>
+        <button class="navbtn" id="dashNextMonth">›</button>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="chart-wrap">
+        <div class="donut-wrap">
+          <svg id="dashChart" viewBox="0 0 200 200"></svg>
+          <div class="donut-callouts" id="donutCallouts"></div>
+          <div class="donut-center-label" id="donutCenterLabel"></div>
+        </div>
+      </div>
+      <div class="dash-empty" id="dashEmpty" style="display:none;">이번 달 등록된 내역이 없습니다.</div>
+    </div>
+    <div class="cat-list" id="catList"></div>
+  </div>
+
+  <button class="fab" id="fabAdd">+</button>
+
+  <div class="tabbar">
+    <button class="tabbtn active" data-screen="calendar">
+      <span class="icon">📅</span>달력
+    </button>
+    <button class="tabbtn" data-screen="dashboard">
+      <span class="icon">📊</span>대시보드
+    </button>
+  </div>
+
+</div>
+
+<!-- Entry modal -->
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <button class="close-btn" id="closeSheet">✕</button>
+    <div class="sheet-handle"></div>
+    <h3 id="sheetTitle">내역 추가</h3>
+
+    <input type="text" inputmode="numeric" class="amount-input mono" id="amountInput" placeholder="0" />
+
+    <div class="segmented" id="typeSegment">
+      <button data-type="expense" class="active expense">지출</button>
+      <button data-type="income" class="income">수입</button>
+    </div>
+
+    <div class="field-label">날짜</div>
+    <input type="date" id="dateInput" />
+
+    <div class="field-label">어느 가계부에 추가할까요?</div>
+    <div class="chip-row" id="targetLedgerChips"></div>
+
+    <div id="payerFieldWrap">
+      <div class="field-label">결제자</div>
+      <div class="chip-row" id="payerChips">
+        <button class="chip" data-payer="jihyeon">지현</button>
+        <button class="chip" data-payer="hyeonje">현제</button>
+        <button class="chip active" data-payer="shared">우리</button>
+      </div>
+    </div>
+
+    <div class="field-label">메모</div>
+    <input type="text" id="memoInput" maxlength="10" placeholder="메모 입력" />
+
+    <div class="field-label">카테고리</div>
+    <div class="chip-row" id="categoryChips"></div>
+
+    <button class="save-btn" id="saveBtn" disabled>저장</button>
+    <button class="delete-entry-btn" id="deleteEntryBtn" style="display:none;">내역 삭제</button>
+  </div>
+</div>
+
+<!-- 메모 검색 -->
+<div class="overlay" id="searchOverlay">
+  <div class="sheet">
+    <button class="close-btn" id="closeSearchSheet">✕</button>
+    <div class="sheet-handle"></div>
+    <h3>메모 검색</h3>
+
+    <input type="text" id="searchInput" placeholder="메모로 검색" />
+
+    <div class="search-results" id="searchResults"></div>
+  </div>
+</div>
+
+<div class="sync-badge" id="syncBadge">동기화됨</div>
+
+<script>
+/* ====================== Firebase 설정 ======================
+   기존 family-meeting-log 프로젝트 재사용 (Firestore 컬렉션 이름은
+   ledger_v1로 분리되어 있어 기존 데이터와 겹치지 않음)
+============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyB-ShWlxTiyT_hUZNN0U7Oss9j3r4ak5ek",
+  authDomain: "family-meeting-log.firebaseapp.com",
+  projectId: "family-meeting-log"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const COLLECTION = "ledger_v1"; // 문서: {ledgerId}_{YYYY-MM} (예: jihyeon_2026-08)
+
+/* ====================== 상수 정의 ====================== */
+const LEDGERS = [
+  { id: "shared",  label: "공용 가계부", color: "#D97757" },
+  { id: "jihyeon",  label: "지현 가계부", color: "#4B8060" },
+  { id: "hyeonje", label: "현제 가계부", color: "#5B7FA6" },
+];
+
+const CATEGORIES = {
+  expense: [
+    { id: "groceries",    label: "식료품",     icon: "🥦", color: "#C1553F" },
+    { id: "dining",       label: "외식/배달",  icon: "🍽️", color: "#E08A5B" },
+    { id: "cafe",         label: "카페",       icon: "☕", color: "#B8896A" },
+    { id: "convenience",  label: "편의점",     icon: "🏪", color: "#D9A257" },
+    { id: "shopping",     label: "쇼핑",       icon: "🛍️", color: "#C97B9B" },
+    { id: "daily",        label: "생필품",     icon: "🧴", color: "#8FA37E" },
+    { id: "medical",      label: "병원/약",    icon: "💊", color: "#B95C5C" },
+    { id: "transit",      label: "교통비",     icon: "🚌", color: "#6B8CAE" },
+    { id: "housing",      label: "주거비",     icon: "🏠", color: "#8A7355" },
+    { id: "telecom",      label: "통신비",     icon: "📱", color: "#7C8FA6" },
+    { id: "subscription", label: "구독료",     icon: "📺", color: "#9B7EC9" },
+    { id: "travel",       label: "여행",       icon: "✈️", color: "#5B9BD5" },
+    { id: "event",        label: "경조사",     icon: "🎁", color: "#C9974A" },
+    { id: "gift",         label: "선물",       icon: "🎀", color: "#E0A9BE" },
+    { id: "culture",      label: "문화생활",   icon: "🎬", color: "#7EAFC4" },
+    { id: "pocketmoney",  label: "용돈",       icon: "👛", color: "#A6998A" },
+  ],
+  income: [
+    { id: "salary",   label: "급여",       icon: "💰", color: "#4B8060" },
+    { id: "bonus",    label: "보너스",     icon: "🎉", color: "#3D8B6E" },
+    { id: "extra",    label: "부수입",     icon: "➕", color: "#5A9C7A" },
+    { id: "allowance",label: "용돈",       icon: "👛", color: "#79A88F" },
+    { id: "interest", label: "배당/이자",  icon: "🏦", color: "#6FA593" },
+    { id: "etc_i",    label: "기타",       icon: "📦", color: "#A6998A" },
+  ],
+};
+
+// 임의 카테고리 추가 기능(테스트용 "하이" 포함)에서 남은 localStorage 데이터 정리
+localStorage.removeItem("custom_categories_expense");
+localStorage.removeItem("custom_categories_income");
+
+/* ====================== 상태 ====================== */
+const state = {
+  currentLedger: localStorage.getItem("ledger_selected") || "shared",
+  calEntries: [],             // 달력 화면에 표시 중인 월의 entries
+  dashEntries: [],            // 대시보드 화면에 표시 중인 월의 entries
+  calDate: new Date(),        // 달력 화면 기준 월
+  selectedDate: null,         // 달력에서 선택된 날짜 (YYYY-MM-DD)
+  dashDate: new Date(),       // 대시보드 화면 기준 월
+  dashType: "expense",
+  dashPayerFilter: new Set(["all"]), // 공용 가계부 대시보드 결제자 필터 ("all" | jihyeon/hyeonje/shared 조합)
+  dashExpandedCats: new Set(), // 대시보드에서 펼쳐진 카테고리 id 목록
+  modalType: "expense",
+  modalTargetLedger: null,
+  modalPayer: "shared",
+  modalCategory: null,
+  modalMemo: "",
+  editingEntry: null, // { original: entry, ledgerId } — set when the modal is editing an existing entry
+  calUnsub: null,
+  dashUnsub: null,
+};
+
+/* ====================== Firestore 연동 (월별 문서 샤딩) ======================
+   문서 경로: ledger_v1/{ledgerId}_{YYYY-MM}  (예: ledger_v1/jihyeon_2026-08)
+   달력 화면과 대시보드 화면이 서로 다른 월을 보고 있을 수 있으므로
+   두 화면은 각각 독립적인 Firestore 구독(listener)을 가진다.
+============================================================================ */
+function monthKeyOf(dateObj) {
+  return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}`;
+}
+function monthDocId(ledgerId, monthKey) {
+  return `${ledgerId}_${monthKey}`;
+}
+
+function listenCalendarMonth(ledgerId, dateObj) {
+  if (state.calUnsub) state.calUnsub();
+  const docId = monthDocId(ledgerId, monthKeyOf(dateObj));
+  state.calUnsub = db.collection(COLLECTION).doc(docId).onSnapshot((snap) => {
+    const data = snap.data();
+    state.calEntries = (data && data.entries) ? data.entries.slice() : [];
+    renderCalendar();
+    renderDayDetail();
+    renderMonthSummary();
+    flashSync();
+  }, (err) => {
+    console.error("Firestore listen error (calendar):", err);
+  });
+}
+
+function listenDashboardMonth(ledgerId, dateObj) {
+  if (state.dashUnsub) state.dashUnsub();
+  const docId = monthDocId(ledgerId, monthKeyOf(dateObj));
+  state.dashUnsub = db.collection(COLLECTION).doc(docId).onSnapshot((snap) => {
+    const data = snap.data();
+    state.dashEntries = (data && data.entries) ? data.entries.slice() : [];
+    renderDashboard();
+    flashSync();
+  }, (err) => {
+    console.error("Firestore listen error (dashboard):", err);
+  });
+}
+
+function flashSync() {
+  const badge = document.getElementById("syncBadge");
+  badge.classList.add("show");
+  clearTimeout(flashSync._t);
+  flashSync._t = setTimeout(() => badge.classList.remove("show"), 900);
+}
+
+async function saveEntry(entry, targetLedgerId) {
+  const docId = monthDocId(targetLedgerId, entry.date.slice(0, 7));
+  await db.collection(COLLECTION).doc(docId).set({
+    entries: firebase.firestore.FieldValue.arrayUnion(entry)
+  }, { merge: true });
+}
+
+async function deleteEntry(entry, ledgerId) {
+  const docId = monthDocId(ledgerId, entry.date.slice(0, 7));
+  await db.collection(COLLECTION).doc(docId).update({
+    entries: firebase.firestore.FieldValue.arrayRemove(entry)
+  });
+}
+
+/* ====================== 가계부 전환 ====================== */
+function switchLedger(id) {
+  state.currentLedger = id;
+  state.selectedDate = null;
+  state.dashPayerFilter = new Set(["all"]);
+  state.dashExpandedCats = new Set();
+  state.calEntries = [];
+  state.dashEntries = [];
+  localStorage.setItem("ledger_selected", id);
+  renderLedgerToggle();
+  renderCalendar();
+  renderDayDetail();
+  renderMonthSummary();
+  renderDashboard();
+  listenCalendarMonth(id, state.calDate);
+  listenDashboardMonth(id, state.dashDate);
+}
+
+function renderLedgerToggle() {
+  document.querySelectorAll(".ledger-toggle-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.id === state.currentLedger);
+  });
+}
+
+document.querySelectorAll(".ledger-toggle-btn").forEach(btn => {
+  btn.addEventListener("click", () => switchLedger(btn.dataset.id));
+});
+
+/* ====================== 탭 전환 ====================== */
+document.querySelectorAll(".tabbtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tabbtn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+    document.getElementById("screen-" + btn.dataset.screen).classList.add("active");
+    document.getElementById("fabAdd").style.display = btn.dataset.screen === "calendar" ? "flex" : "flex";
+  });
+});
+
+/* ====================== 달력 화면 ====================== */
+function ymd(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function fmtNum(n) { return Number(n).toLocaleString("ko-KR"); }
+function dayWithWeekday(dateStr) {
+  const [y, m, d] = (dateStr || "").split("-").map(Number);
+  if (!y || !m || !d) return "";
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][new Date(y, m - 1, d).getDay()];
+  return `${d}(${wd})`;
+}
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function renderCalendar() {
+  const d = state.calDate;
+  const year = d.getFullYear(), month = d.getMonth();
+  document.getElementById("monthLabel").textContent = `${year}년 ${month + 1}월`;
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayStr = ymd(new Date());
+
+  const entriesByDate = {};
+  state.calEntries.forEach(e => {
+    (entriesByDate[e.date] = entriesByDate[e.date] || []).push(e);
+  });
+
+  let html = "";
+  for (let i = 0; i < firstDay; i++) html += `<div class="day-cell empty"></div>`;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dayEntries = entriesByDate[dateStr] || [];
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === state.selectedDate;
+
+    let expenseTotal = 0, incomeTotal = 0;
+    dayEntries.forEach(e => {
+      if (e.type === "expense") expenseTotal += Number(e.amount);
+      else incomeTotal += Number(e.amount);
+    });
+
+    let linesHtml = "";
+    if (expenseTotal > 0) linesHtml += `<div class="day-line expense">-${fmtNum(expenseTotal)}</div>`;
+    if (incomeTotal > 0) linesHtml += `<div class="day-line income">+${fmtNum(incomeTotal)}</div>`;
+
+    html += `
+      <div class="day-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}" data-date="${dateStr}">
+        <span class="day-num">${day}</span>
+        <div class="day-entries">${linesHtml}</div>
+      </div>`;
+  }
+
+  document.getElementById("calendarGrid").innerHTML = html;
+  document.querySelectorAll(".day-cell[data-date]").forEach(cell => {
+    cell.addEventListener("click", () => selectDate(cell.dataset.date));
+  });
+}
+
+function selectDate(dateStr) {
+  state.selectedDate = dateStr;
+  renderCalendar();
+  renderDayDetail();
+}
+
+function renderDayDetail() {
+  const panel = document.getElementById("dayDetail");
+  if (!state.selectedDate) {
+    panel.style.display = "none";
+    return;
+  }
+  panel.style.display = "block";
+
+  const [y, m, d] = state.selectedDate.split("-");
+  document.getElementById("dayDetailTitle").textContent = `${Number(m)}월 ${Number(d)}일 내역`;
+
+  const dayEntries = state.calEntries
+    .filter(e => e.date === state.selectedDate)
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+  const listEl = document.getElementById("dayDetailList");
+  if (dayEntries.length === 0) {
+    listEl.innerHTML = `<div class="day-detail-empty">등록된 내역이 없습니다.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = dayEntries.map(e => {
+    const cat = (CATEGORIES[e.type] || []).find(c => c.id === e.category);
+    const icon = cat ? cat.icon : "📦";
+    const name = cat ? cat.label : e.category;
+    const sign = e.type === "expense" ? "-" : "+";
+    return `
+      <div class="day-detail-row" data-id="${e.id}">
+        <span class="icon">${icon}</span>
+        <span class="name">${name}${e.memo ? ` · ${escapeHtml(e.memo)}` : ""}</span>
+        <span class="amt ${e.type}">${sign}${fmtNum(e.amount)}원</span>
+      </div>`;
+  }).join("");
+
+  listEl.querySelectorAll(".day-detail-row").forEach(row => {
+    row.addEventListener("click", () => {
+      const entry = dayEntries.find(e => e.id === row.dataset.id);
+      if (entry) openEditModal(entry, state.currentLedger);
+    });
+  });
+}
+
+function renderMonthSummary() {
+  let income = 0, expense = 0;
+  state.calEntries.forEach(e => {
+    if (e.type === "income") income += Number(e.amount);
+    else expense += Number(e.amount);
+  });
+  document.getElementById("summaryRemaining").textContent = `${fmtNum(income - expense)}원`;
+  document.getElementById("summaryIncome").textContent = `${fmtNum(income)}원`;
+  document.getElementById("summaryExpense").textContent = `${fmtNum(expense)}원`;
+}
+
+document.getElementById("prevMonth").addEventListener("click", () => {
+  state.calDate = new Date(state.calDate.getFullYear(), state.calDate.getMonth() - 1, 1);
+  state.selectedDate = null;
+  state.calEntries = [];
+  renderCalendar();
+  renderDayDetail();
+  renderMonthSummary();
+  listenCalendarMonth(state.currentLedger, state.calDate);
+});
+document.getElementById("nextMonth").addEventListener("click", () => {
+  state.calDate = new Date(state.calDate.getFullYear(), state.calDate.getMonth() + 1, 1);
+  state.selectedDate = null;
+  state.calEntries = [];
+  renderCalendar();
+  renderDayDetail();
+  renderMonthSummary();
+  listenCalendarMonth(state.currentLedger, state.calDate);
+});
+
+/* ====================== 대시보드 화면 ====================== */
+document.getElementById("dashExpenseBtn").addEventListener("click", () => {
+  state.dashType = "expense";
+  state.dashExpandedCats = new Set();
+  document.getElementById("dashExpenseBtn").classList.add("active");
+  document.getElementById("dashIncomeBtn").classList.remove("active");
+  renderDashboard();
+});
+document.getElementById("dashIncomeBtn").addEventListener("click", () => {
+  state.dashType = "income";
+  state.dashExpandedCats = new Set();
+  document.getElementById("dashIncomeBtn").classList.add("active");
+  document.getElementById("dashExpenseBtn").classList.remove("active");
+  renderDashboard();
+});
+document.getElementById("dashPrevMonth").addEventListener("click", () => {
+  state.dashDate = new Date(state.dashDate.getFullYear(), state.dashDate.getMonth() - 1, 1);
+  state.dashEntries = [];
+  state.dashExpandedCats = new Set();
+  renderDashboard();
+  listenDashboardMonth(state.currentLedger, state.dashDate);
+});
+document.getElementById("dashNextMonth").addEventListener("click", () => {
+  state.dashDate = new Date(state.dashDate.getFullYear(), state.dashDate.getMonth() + 1, 1);
+  state.dashEntries = [];
+  state.dashExpandedCats = new Set();
+  renderDashboard();
+  listenDashboardMonth(state.currentLedger, state.dashDate);
+});
+
+function renderPayerFilter() {
+  const wrap = document.getElementById("payerFilter");
+  if (state.currentLedger !== "shared") {
+    wrap.style.display = "none";
+    return;
+  }
+  wrap.style.display = "flex";
+  wrap.querySelectorAll(".chip").forEach(chip => {
+    chip.classList.toggle("active", state.dashPayerFilter.has(chip.dataset.payer));
+  });
+}
+
+document.getElementById("payerFilter").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  const p = chip.dataset.payer;
+
+  if (p === "all") {
+    state.dashPayerFilter = new Set(["all"]);
+  } else if (state.dashPayerFilter.has("all")) {
+    state.dashPayerFilter = new Set([p]);
+  } else if (state.dashPayerFilter.has(p)) {
+    state.dashPayerFilter.delete(p);
+  } else {
+    state.dashPayerFilter.add(p);
+  }
+  state.dashExpandedCats = new Set();
+  renderPayerFilter();
+  renderDashboard();
+});
+
+/* ====================== 가로 막대 차트 ====================== */
+function segmentShade(type, index, count) {
+  const hue = type === "expense" ? 340 : 150;
+  const maxL = 86, minL = 52;
+  const t = count <= 1 ? 0 : index / (count - 1);
+  const l = maxL - t * (maxL - minL);
+  return `hsl(${hue} 55% ${l}%)`;
+}
+
+function polarPoint(cx, cy, r, angleDeg) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function donutSegmentPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
+  const so = polarPoint(cx, cy, rOuter, startAngle);
+  const eo = polarPoint(cx, cy, rOuter, endAngle);
+  const si = polarPoint(cx, cy, rInner, endAngle);
+  const ei = polarPoint(cx, cy, rInner, startAngle);
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+  return `M ${so.x.toFixed(2)} ${so.y.toFixed(2)} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${eo.x.toFixed(2)} ${eo.y.toFixed(2)} L ${si.x.toFixed(2)} ${si.y.toFixed(2)} A ${rInner} ${rInner} 0 ${largeArc} 0 ${ei.x.toFixed(2)} ${ei.y.toFixed(2)} Z`;
+}
+
+function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, grandTotal, type) {
+  const CX = 100, CY = 100, R_OUT = 72, R_IN = 44, LINE_R = 90, LINE_END_R = 80;
+
+  if (catsWithAmount.length === 1) {
+    const c = catsWithAmount[0];
+    const tip = polarPoint(CX, CY, LINE_R, 0);
+    const lineEnd = polarPoint(CX, CY, LINE_END_R, 0);
+    svg.innerHTML = `
+      <circle cx="${CX}" cy="${CY}" r="${R_OUT}" fill="${segmentShade(type, 0, 1)}" />
+      <circle cx="${CX}" cy="${CY}" r="${R_IN}" fill="var(--card)" />
+      <line x1="${CX}" y1="${CY - R_OUT}" x2="${lineEnd.x.toFixed(2)}" y2="${lineEnd.y.toFixed(2)}" stroke="#000000" stroke-width="0.75" />`;
+    calloutsEl.innerHTML = `
+      <div class="donut-callout" style="left:${(tip.x / 2).toFixed(1)}%; top:${(tip.y / 2).toFixed(1)}%; transform:translate(-50%,-100%);">
+        <span class="icon">${c.icon}</span><span class="label">${escapeHtml(c.label)}</span>
+      </div>`;
+    return;
+  }
+
+  const threshold = catsWithAmount.length <= 5 ? 0 : 0.05;
+
+  let angle = 0;
+  let segParts = "";
+  let lineParts = "";
+  let callouts = "";
+
+  catsWithAmount.forEach((c, i) => {
+    const share = totals[c.id] / grandTotal;
+    const sweep = share * 360;
+    const start = angle;
+    const end = angle + sweep;
+    const mid = start + sweep / 2;
+    angle = end;
+
+    segParts += `<path d="${donutSegmentPath(CX, CY, R_OUT, R_IN, start, end)}" fill="${segmentShade(type, i, catsWithAmount.length)}" />`;
+
+    if (share > threshold) {
+      const edge = polarPoint(CX, CY, R_OUT, mid);
+      const tip = polarPoint(CX, CY, LINE_R, mid);
+      const onRight = tip.x >= CX;
+
+      // 아이콘 글자의 대략적인 중심점 (아이콘은 항상 라벨의 원 바깥쪽 끝에 위치)
+      const ICON_HALF_W = 7;
+      const iconCenter = { x: onRight ? tip.x + ICON_HALF_W : tip.x - ICON_HALF_W, y: tip.y };
+
+      const dx = iconCenter.x - edge.x, dy = iconCenter.y - edge.y;
+      const dist = Math.hypot(dx, dy);
+      const gap = 10; // 아이콘과 겹치지 않도록 살짝 못 미쳐서 멈춤
+      const t = Math.max(0, (dist - gap) / dist);
+      const lineEnd = { x: edge.x + dx * t, y: edge.y + dy * t };
+
+      lineParts += `<line x1="${edge.x.toFixed(2)}" y1="${edge.y.toFixed(2)}" x2="${lineEnd.x.toFixed(2)}" y2="${lineEnd.y.toFixed(2)}" stroke="#000000" stroke-width="0.75" />`;
+
+      const left = (tip.x / 2).toFixed(1);
+      const top = (tip.y / 2).toFixed(1);
+      const inner = onRight
+        ? `<span class="icon">${c.icon}</span><span class="label">${escapeHtml(c.label)}</span>`
+        : `<span class="label">${escapeHtml(c.label)}</span><span class="icon">${c.icon}</span>`;
+      const anchor = onRight ? "translate(0,-50%)" : "translate(-100%,-50%)";
+      callouts += `
+        <div class="donut-callout" style="left:${left}%; top:${top}%; transform:${anchor};">
+          ${inner}
+        </div>`;
+    }
+  });
+
+  svg.innerHTML = segParts + lineParts;
+  calloutsEl.innerHTML = callouts;
+}
+
+function renderDashboard() {
+  renderPayerFilter();
+
+  const d = state.dashDate;
+  const month = d.getMonth();
+  document.getElementById("donutCenterLabel").textContent = `${month + 1}월`;
+
+  let filtered = state.dashEntries.filter(e => e.type === state.dashType);
+  if (state.currentLedger === "shared" && !state.dashPayerFilter.has("all")) {
+    filtered = filtered.filter(e => state.dashPayerFilter.has(e.payer));
+  }
+
+  const totalAmount = filtered.reduce((sum, e) => sum + Number(e.amount), 0);
+  document.getElementById("dashTotal").textContent = `${fmtNum(totalAmount)}원`;
+
+  const cats = CATEGORIES[state.dashType];
+  const totals = {};
+  const entriesByCat = {};
+  cats.forEach(c => { totals[c.id] = 0; entriesByCat[c.id] = []; });
+  filtered.forEach(e => {
+    totals[e.category] = (totals[e.category] || 0) + Number(e.amount);
+    if (entriesByCat[e.category]) entriesByCat[e.category].push(e);
+  });
+
+  const catsWithAmount = cats.filter(c => totals[c.id] > 0).sort((a, b) => totals[b.id] - totals[a.id]);
+
+  const chartEl = document.getElementById("dashChart");
+  const calloutsEl = document.getElementById("donutCallouts");
+  const emptyMsg = document.getElementById("dashEmpty");
+
+  if (catsWithAmount.length === 0) {
+    emptyMsg.style.display = "block";
+    chartEl.innerHTML = "";
+    calloutsEl.innerHTML = "";
+  } else {
+    emptyMsg.style.display = "none";
+    const grandTotal = catsWithAmount.reduce((sum, c) => sum + totals[c.id], 0);
+    renderDonutChart(chartEl, calloutsEl, catsWithAmount, totals, grandTotal, state.dashType);
+  }
+
+  const sign = state.dashType === "expense" ? "-" : "+";
+
+  document.getElementById("catList").innerHTML = catsWithAmount.map(c => {
+    const expanded = state.dashExpandedCats.has(c.id);
+    const entries = entriesByCat[c.id].slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+
+    const entriesHtml = entries.map(e => {
+      const dateLabel = dayWithWeekday(e.date);
+      const memoHtml = e.memo ? escapeHtml(e.memo) : `<span class="no-memo">메모 없음</span>`;
+      return `
+        <div class="cat-entry-row" data-id="${e.id}">
+          <span class="search-date mono">${dateLabel}</span>
+          <span class="entry-memo">${memoHtml}</span>
+          <span class="amt ${e.type}">${sign}${fmtNum(e.amount)}원</span>
+        </div>`;
+    }).join("");
+
+    return `
+    <div class="cat-row-wrap">
+      <button class="cat-row" data-cat="${c.id}">
+        <span class="icon">${c.icon}</span>
+        <span class="name">${c.label}</span>
+        <span class="amt ${state.dashType}">${sign}${fmtNum(totals[c.id])}원</span>
+        <span class="chevron">${expanded ? "▲" : "▼"}</span>
+      </button>
+      ${expanded ? `<div class="cat-entries">${entriesHtml}</div>` : ""}
+    </div>`;
+  }).join("");
+
+  document.querySelectorAll(".cat-row").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.cat;
+      if (state.dashExpandedCats.has(id)) state.dashExpandedCats.delete(id);
+      else state.dashExpandedCats.add(id);
+      renderDashboard();
+    });
+  });
+
+  document.querySelectorAll(".cat-entry-row").forEach(row => {
+    row.addEventListener("click", () => {
+      const entry = state.dashEntries.find(e => e.id === row.dataset.id);
+      if (entry) openEditModal(entry, state.currentLedger);
+    });
+  });
+}
+
+/* ====================== 입력 모달 ====================== */
+const overlay = document.getElementById("overlay");
+const amountInput = document.getElementById("amountInput");
+const dateInput = document.getElementById("dateInput");
+const memoInput = document.getElementById("memoInput");
+const saveBtn = document.getElementById("saveBtn");
+const sheetTitle = document.getElementById("sheetTitle");
+const deleteEntryBtn = document.getElementById("deleteEntryBtn");
+
+function openModal(dateStr) {
+  state.editingEntry = null;
+  state.modalType = "expense";
+  state.modalTargetLedger = state.currentLedger;
+  state.modalPayer = "shared";
+  state.modalCategory = null;
+  state.modalMemo = "";
+
+  amountInput.value = "";
+  memoInput.value = "";
+  dateInput.value = dateStr || ymd(new Date());
+
+  document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === "expense"));
+
+  sheetTitle.textContent = "내역 추가";
+  saveBtn.textContent = "저장";
+  deleteEntryBtn.style.display = "none";
+
+  renderTargetLedgerChips();
+  updatePayerFieldVisibility();
+  renderCategoryChips();
+  updateSaveEnabled();
+  overlay.classList.add("show");
+}
+
+function openEditModal(entry, ledgerId) {
+  state.editingEntry = { original: entry, ledgerId };
+  state.modalType = entry.type;
+  state.modalTargetLedger = ledgerId;
+  state.modalPayer = entry.payer;
+  state.modalCategory = entry.category;
+  state.modalMemo = entry.memo || "";
+
+  amountInput.value = Number(entry.amount).toLocaleString("ko-KR");
+  memoInput.value = state.modalMemo;
+  dateInput.value = entry.date;
+
+  document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === entry.type));
+
+  sheetTitle.textContent = "내역 수정";
+  saveBtn.textContent = "저장";
+  deleteEntryBtn.style.display = "block";
+
+  renderTargetLedgerChips();
+  updatePayerFieldVisibility();
+  renderCategoryChips();
+  updateSaveEnabled();
+  overlay.classList.add("show");
+}
+
+function updatePayerFieldVisibility() {
+  const wrap = document.getElementById("payerFieldWrap");
+  if (state.modalTargetLedger === "shared") {
+    wrap.style.display = "block";
+    document.querySelectorAll("#payerChips .chip").forEach(b => b.classList.toggle("active", b.dataset.payer === state.modalPayer));
+  } else {
+    // 지현/현제 가계부는 결제자가 가계부 주인으로 고정되므로 선택 UI 숨김
+    wrap.style.display = "none";
+    state.modalPayer = state.modalTargetLedger;
+  }
+}
+
+function closeModal() { overlay.classList.remove("show"); }
+document.getElementById("closeSheet").addEventListener("click", closeModal);
+overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
+document.getElementById("fabAdd").addEventListener("click", () => openModal(state.selectedDate || ymd(new Date())));
+
+memoInput.addEventListener("input", () => {
+  state.modalMemo = memoInput.value;
+});
+
+amountInput.addEventListener("input", () => {
+  const digits = amountInput.value.replace(/[^0-9]/g, "");
+  amountInput.value = digits ? Number(digits).toLocaleString("ko-KR") : "";
+  updateSaveEnabled();
+});
+
+document.querySelectorAll("#typeSegment button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    state.modalType = btn.dataset.type;
+    state.modalCategory = null;
+    document.querySelectorAll("#typeSegment button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    renderCategoryChips();
+    updateSaveEnabled();
+  });
+});
+
+document.getElementById("payerChips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  state.modalPayer = chip.dataset.payer;
+  document.querySelectorAll("#payerChips .chip").forEach(c => c.classList.remove("active"));
+  chip.classList.add("active");
+});
+
+function renderTargetLedgerChips() {
+  const el = document.getElementById("targetLedgerChips");
+  el.innerHTML = LEDGERS.map(l => `
+    <button class="chip ${l.id === state.modalTargetLedger ? "active" : ""}" data-ledger="${l.id}">${l.label.replace(" 가계부","")}</button>
+  `).join("");
+  el.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      state.modalTargetLedger = chip.dataset.ledger;
+      el.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      updatePayerFieldVisibility();
+    });
+  });
+}
+
+function renderCategoryChips() {
+  const el = document.getElementById("categoryChips");
+  const cats = CATEGORIES[state.modalType];
+  el.innerHTML = cats.map(c => `
+    <button class="chip ${c.id === state.modalCategory ? "active" : ""}" data-cat="${c.id}">${c.icon} ${c.label}</button>
+  `).join("");
+  el.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      state.modalCategory = chip.dataset.cat;
+      el.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      updateSaveEnabled();
+    });
+  });
+}
+
+function currentAmount() {
+  return Number(amountInput.value.replace(/[^0-9]/g, "")) || 0;
+}
+
+function updateSaveEnabled() {
+  saveBtn.disabled = !(currentAmount() > 0 && state.modalCategory && state.modalTargetLedger && dateInput.value);
+}
+dateInput.addEventListener("change", updateSaveEnabled);
+
+saveBtn.addEventListener("click", async () => {
+  if (saveBtn.disabled) return;
+  saveBtn.disabled = true;
+  saveBtn.textContent = "저장 중...";
+
+  const editing = state.editingEntry;
+  const entry = {
+    id: editing ? editing.original.id : (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)),
+    date: dateInput.value,
+    type: state.modalType,
+    amount: currentAmount(),
+    category: state.modalCategory,
+    payer: state.modalPayer,
+    memo: (state.modalMemo || "").trim().slice(0, 10),
+    createdAt: editing ? editing.original.createdAt : Date.now(),
+  };
+
+  try {
+    if (editing) await deleteEntry(editing.original, editing.ledgerId);
+    await saveEntry(entry, state.modalTargetLedger);
+    closeModal();
+  } catch (err) {
+    console.error("저장 실패:", err);
+    alert("저장에 실패했습니다. Firebase 설정을 확인해주세요.\n" + err.message);
+  } finally {
+    saveBtn.textContent = "저장";
+    updateSaveEnabled();
+  }
+});
+
+deleteEntryBtn.addEventListener("click", async () => {
+  if (!state.editingEntry) return;
+  if (!confirm("이 내역을 삭제할까요?")) return;
+
+  deleteEntryBtn.disabled = true;
+  saveBtn.disabled = true;
+  try {
+    await deleteEntry(state.editingEntry.original, state.editingEntry.ledgerId);
+    closeModal();
+  } catch (err) {
+    console.error("삭제 실패:", err);
+    alert("삭제에 실패했습니다.\n" + err.message);
+  } finally {
+    deleteEntryBtn.disabled = false;
+    updateSaveEnabled();
+  }
+});
+
+/* ====================== 메모 검색 ====================== */
+const searchOverlay = document.getElementById("searchOverlay");
+const searchInput = document.getElementById("searchInput");
+const searchResults = document.getElementById("searchResults");
+let searchAllEntries = [];
+
+async function openSearch() {
+  searchOverlay.classList.add("show");
+  searchInput.value = "";
+  searchResults.innerHTML = `<div class="day-detail-empty">불러오는 중...</div>`;
+
+  const prefix = `${state.currentLedger}_`;
+  try {
+    const snap = await db.collection(COLLECTION)
+      .where(firebase.firestore.FieldPath.documentId(), ">=", prefix)
+      .where(firebase.firestore.FieldPath.documentId(), "<", prefix + "")
+      .get();
+    searchAllEntries = [];
+    snap.forEach(doc => {
+      const data = doc.data();
+      if (data && data.entries) searchAllEntries = searchAllEntries.concat(data.entries);
+    });
+  } catch (err) {
+    console.error("검색 데이터 로드 실패:", err);
+    searchAllEntries = [];
+  }
+  renderSearchResults();
+  searchInput.focus();
+}
+
+function closeSearch() {
+  searchOverlay.classList.remove("show");
+}
+
+function renderSearchResults() {
+  const query = searchInput.value.trim();
+  if (!query) {
+    searchResults.innerHTML = `<div class="day-detail-empty">메모로 검색해보세요.</div>`;
+    return;
+  }
+
+  const q = query.toLowerCase();
+  const matched = searchAllEntries
+    .filter(e => e.memo && e.memo.toLowerCase().includes(q))
+    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+
+  if (matched.length === 0) {
+    searchResults.innerHTML = `<div class="day-detail-empty">검색 결과가 없습니다.</div>`;
+    return;
+  }
+
+  searchResults.innerHTML = matched.map(e => {
+    const cat = (CATEGORIES[e.type] || []).find(c => c.id === e.category);
+    const icon = cat ? cat.icon : "📦";
+    const name = cat ? cat.label : e.category;
+    const sign = e.type === "expense" ? "-" : "+";
+    const [, m, d] = (e.date || "").split("-");
+    const dateLabel = m && d ? `${Number(m)}/${Number(d)}` : "";
+    return `
+      <div class="day-detail-row">
+        <span class="search-date mono">${dateLabel}</span>
+        <span class="icon">${icon}</span>
+        <span class="name">${name}${e.memo ? ` · ${escapeHtml(e.memo)}` : ""}</span>
+        <span class="amt ${e.type}">${sign}${fmtNum(e.amount)}원</span>
+      </div>`;
+  }).join("");
+}
+
+document.getElementById("searchBtn").addEventListener("click", openSearch);
+document.getElementById("closeSearchSheet").addEventListener("click", closeSearch);
+searchOverlay.addEventListener("click", (e) => { if (e.target === searchOverlay) closeSearch(); });
+searchInput.addEventListener("input", renderSearchResults);
+
+/* ====================== 초기화 ====================== */
+renderLedgerToggle();
+renderMonthSummary();
+listenCalendarMonth(state.currentLedger, state.calDate);
+listenDashboardMonth(state.currentLedger, state.dashDate);
+</script>
+</body>
+</html>
