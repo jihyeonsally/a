@@ -430,7 +430,7 @@
       <div class="chip-row quick-add-row" id="quickAddRow" style="display:none;">
         <button class="chip" data-quick-cat="transit" data-quick-memo="스윙">🚲 스윙</button>
         <button class="chip" data-quick-cat="cafe">☕ 카페</button>
-        <button class="chip" data-quick-cat="cafe" data-quick-amount="1500">🥤 메가커피</button>
+        <button class="chip" data-quick-cat="cafe" data-quick-amount="1500" data-ledger-only="hyeonje">🥤 메가커피</button>
         <button class="chip" data-quick-cat="shopping">🛍️ 쇼핑</button>
         <button class="chip" data-quick-cat="dining">🍽️ 외식</button>
         <button class="chip" data-quick-cat="dues">🧾 회비</button>
@@ -912,6 +912,10 @@ function renderPayerFilter() {
   if (state.currentLedger !== "shared") {
     wrap.style.display = "none";
     quickAddRow.style.display = "flex";
+    quickAddRow.querySelectorAll(".chip").forEach(chip => {
+      const only = chip.dataset.ledgerOnly;
+      chip.style.display = (!only || only === state.currentLedger) ? "" : "none";
+    });
     return;
   }
   quickAddRow.style.display = "none";
