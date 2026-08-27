@@ -27,6 +27,8 @@
     --income: #2F9E75;
     --income-soft: #D9F0E3;
     --border: #D4EFE6;
+    --saturday: #3B6FD6;
+    --sunday: #D64545;
     --radius: 16px;
     --radius-sm: 10px;
     --shadow: 0 2px 8px rgba(31,46,42,0.06);
@@ -120,6 +122,8 @@
   .weekdays span{
     text-align:center; font-size:11px; color: var(--text); font-weight:600;
   }
+  .wd-sat{ color: var(--saturday); }
+  .wd-sun{ color: var(--sunday); }
   .calendar-grid{
     display:grid; grid-template-columns: repeat(7, minmax(0,1fr));
     gap: 4px; padding: 0 12px;
@@ -406,7 +410,7 @@
       </div>
     </div>
     <div class="weekdays">
-      <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+      <span class="wd-sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="wd-sat">토</span>
     </div>
     <div class="calendar-grid" id="calendarGrid"></div>
 
@@ -766,11 +770,15 @@ function ymd(d) {
   return `${y}-${m}-${day}`;
 }
 function fmtNum(n) { return Number(n).toLocaleString("ko-KR"); }
+function weekdayClass(dow) {
+  return dow === 0 ? "wd-sun" : dow === 6 ? "wd-sat" : "";
+}
 function dayWithWeekday(dateStr) {
   const [y, m, d] = (dateStr || "").split("-").map(Number);
   if (!y || !m || !d) return "";
-  const wd = ["일", "월", "화", "수", "목", "금", "토"][new Date(y, m - 1, d).getDay()];
-  return `${d}(${wd})`;
+  const dow = new Date(y, m - 1, d).getDay();
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][dow];
+  return `<span class="${weekdayClass(dow)}">${d}(${wd})</span>`;
 }
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -809,9 +817,12 @@ function renderCalendar() {
     if (expenseTotal > 0) linesHtml += `<div class="day-line expense">-${fmtNum(expenseTotal)}</div>`;
     if (incomeTotal > 0) linesHtml += `<div class="day-line income">+${fmtNum(incomeTotal)}</div>`;
 
+    const dow = (firstDay + day - 1) % 7;
+    const wdClass = weekdayClass(dow);
+
     html += `
       <div class="day-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}" data-date="${dateStr}">
-        <span class="day-num">${day}</span>
+        <span class="day-num ${wdClass}">${day}</span>
         <div class="day-entries">${linesHtml}</div>
       </div>`;
   }
@@ -837,8 +848,10 @@ function renderDayDetail() {
   panel.style.display = "block";
 
   const [y, m, d] = state.selectedDate.split("-");
-  const wd = ["일", "월", "화", "수", "목", "금", "토"][new Date(Number(y), Number(m) - 1, Number(d)).getDay()];
-  document.getElementById("dayDetailTitle").textContent = `${Number(m)}월 ${Number(d)}일 (${wd}) 내역`;
+  const dow = new Date(Number(y), Number(m) - 1, Number(d)).getDay();
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][dow];
+  document.getElementById("dayDetailTitle").innerHTML =
+    `<span class="${weekdayClass(dow)}">${Number(m)}월 ${Number(d)}일 (${wd})</span> 내역`;
 
   const dayEntries = state.calEntries
     .filter(e => e.date === state.selectedDate)
@@ -1488,8 +1501,8 @@ function renderSearchResults() {
     const icon = cat ? cat.icon : "📦";
     const name = cat ? cat.label : e.category;
     const sign = e.type === "expense" ? "-" : "+";
-    const [, m, d] = (e.date || "").split("-");
-    const dateLabel = m && d ? `${Number(m)}/${Number(d)}` : "";
+    const [y, m, d] = (e.date || "").split("-").map(Number);
+    const dateLabel = m && d ? `<span class="${weekdayClass(new Date(y, m - 1, d).getDay())}">${m}/${d}</span>` : "";
     return `
       <div class="day-detail-row">
         <span class="search-date mono">${dateLabel}</span>
