@@ -546,7 +546,7 @@ function blankMeeting(){
     menu: { ingredients:'', shopping:'', notes:'', days: emptyDays(['jihyun','hyeonje']), merged: emptyBoolDays() },
     plan: { days: emptyDays(['jihyun','hyeonje']), merged: emptyBoolDays(), todos: [], memo: '' },
     finance: { review:'', wishlist:[], investReview:'' },
-    happiness: { me:{hearts:[true,true,true,true,true],good:'',wish:''}, partner:{hearts:[true,true,true,true,true],good:'',wish:''} },
+    happiness: { me:{hearts:[true,true,true,true,true],good:'',wish:'',pledge:''}, partner:{hearts:[true,true,true,true,true],good:'',wish:'',pledge:''} },
     travel: { items: [] },
     goals: { list: [] }
   };
@@ -645,7 +645,7 @@ function hasContent(m, cat){
   if(cat==='menu') return !!(m.menu.ingredients.trim() || dayHasAny(m.menu.days, ['jihyun','hyeonje']));
   if(cat==='plan') return dayHasAny(m.plan.days, ['jihyun','hyeonje']) || (m.plan.todos && m.plan.todos.length>0);
   if(cat==='finance') return !!(m.finance.review.trim() || m.finance.investReview.trim() || m.finance.wishlist.length);
-  if(cat==='happy') return !!(m.happiness.me.good.trim()||m.happiness.me.wish.trim()||m.happiness.partner.good.trim()||m.happiness.partner.wish.trim());
+  if(cat==='happy') return !!(m.happiness.me.good.trim()||m.happiness.me.wish.trim()||(m.happiness.me.pledge||'').trim()||m.happiness.partner.good.trim()||m.happiness.partner.wish.trim()||(m.happiness.partner.pledge||'').trim());
   if(cat==='travel') return m.travel.items.length>0;
   if(cat==='goal') return m.goals.list.length>0;
   return false;
@@ -910,6 +910,8 @@ function renderPerson(key,label){
       <textarea class="autosize" placeholder="요즘 고마웠던 순간..." oninput="autoGrow(this)" onchange="h_field('${key}','good', this.value)">${esc(p.good)}</textarea>
       <div class="field-label">부탁해요</div>
       <textarea class="autosize" placeholder="앞으로 바라는 것..." oninput="autoGrow(this)" onchange="h_field('${key}','wish', this.value)">${esc(p.wish)}</textarea>
+      <div class="field-label">나의 다짐</div>
+      <textarea class="autosize" placeholder="스스로 지키고 싶은 다짐..." oninput="autoGrow(this)" onchange="h_field('${key}','pledge', this.value)">${esc(p.pledge)}</textarea>
     </div>
   `;
 }
