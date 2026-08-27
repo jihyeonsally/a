@@ -235,7 +235,6 @@
     display:flex; align-items:center; gap:3px; white-space:nowrap;
   }
   .donut-callout .icon{ font-size:13px; }
-  .donut-callout .label{ font-size:10px; font-weight:600; color: var(--text); }
   .dash-empty{ text-align:center; color: var(--text-dim); font-size:13px; padding: 24px 0; }
 
   .cat-list{ margin: 0 16px; display:flex; flex-direction:column; gap:8px; }
@@ -929,7 +928,7 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
       <line x1="${CX}" y1="${CY - R_OUT}" x2="${lineEnd.x.toFixed(2)}" y2="${lineEnd.y.toFixed(2)}" stroke="#000000" stroke-width="0.75" />`;
     calloutsEl.innerHTML = `
       <div class="donut-callout" style="left:${(tip.x / 2).toFixed(1)}%; top:${(tip.y / 2).toFixed(1)}%; transform:translate(-50%,-100%);">
-        <span class="icon">${c.icon}</span><span class="label">${escapeHtml(c.label)}</span>
+        <span class="icon">${c.icon}</span>
       </div>`;
     return;
   }
@@ -960,29 +959,16 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
     if (share > threshold) {
       const edge = polarPoint(CX, CY, R_OUT, mid);
       const tip = polarPoint(CX, CY, LINE_R, mid);
-      const onRight = tip.x >= CX;
-
-      // 아이콘 글자의 대략적인 중심점 (아이콘은 항상 라벨의 원 바깥쪽 끝에 위치)
-      const ICON_HALF_W = 7;
-      const iconCenter = { x: onRight ? tip.x + ICON_HALF_W : tip.x - ICON_HALF_W, y: tip.y };
-
-      const dx = iconCenter.x - edge.x, dy = iconCenter.y - edge.y;
-      const dist = Math.hypot(dx, dy);
       const gap = 10; // 아이콘과 겹치지 않도록 살짝 못 미쳐서 멈춤
-      const t = Math.max(0, (dist - gap) / dist);
-      const lineEnd = { x: edge.x + dx * t, y: edge.y + dy * t };
+      const lineEnd = polarPoint(CX, CY, LINE_R - gap, mid);
 
       lineParts += `<line x1="${edge.x.toFixed(2)}" y1="${edge.y.toFixed(2)}" x2="${lineEnd.x.toFixed(2)}" y2="${lineEnd.y.toFixed(2)}" stroke="#000000" stroke-width="0.75" />`;
 
       const left = (tip.x / 2).toFixed(1);
       const top = (tip.y / 2).toFixed(1);
-      const inner = onRight
-        ? `<span class="icon">${c.icon}</span><span class="label">${escapeHtml(c.label)}</span>`
-        : `<span class="label">${escapeHtml(c.label)}</span><span class="icon">${c.icon}</span>`;
-      const anchor = onRight ? "translate(0,-50%)" : "translate(-100%,-50%)";
       callouts += `
-        <div class="donut-callout" style="left:${left}%; top:${top}%; transform:${anchor};">
-          ${inner}
+        <div class="donut-callout" style="left:${left}%; top:${top}%; transform:translate(-50%,-50%);">
+          <span class="icon">${c.icon}</span>
         </div>`;
     }
   });
