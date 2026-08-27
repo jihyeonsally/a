@@ -430,6 +430,7 @@
       <div class="chip-row quick-add-row" id="quickAddRow" style="display:none;">
         <button class="chip" data-quick-cat="transit" data-quick-memo="스윙">🚲 스윙</button>
         <button class="chip" data-quick-cat="cafe">☕ 카페</button>
+        <button class="chip" data-quick-cat="cafe" data-quick-amount="1500">🥤 메가커피</button>
         <button class="chip" data-quick-cat="shopping">🛍️ 쇼핑</button>
         <button class="chip" data-quick-cat="dining">🍽️ 외식</button>
         <button class="chip" data-quick-cat="dues">🧾 회비</button>
@@ -923,7 +924,11 @@ function renderPayerFilter() {
 document.getElementById("quickAddRow").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
-  openModal(ymd(new Date()), { category: chip.dataset.quickCat, memo: chip.dataset.quickMemo || "" });
+  openModal(ymd(new Date()), {
+    category: chip.dataset.quickCat,
+    memo: chip.dataset.quickMemo || "",
+    amount: chip.dataset.quickAmount || "",
+  });
 });
 
 document.getElementById("payerFilter").addEventListener("click", (e) => {
@@ -1175,7 +1180,7 @@ function openModal(dateStr, preset) {
   state.modalCategory = (preset && preset.category) || null;
   state.modalMemo = (preset && preset.memo) || "";
 
-  amountInput.value = "";
+  amountInput.value = (preset && preset.amount) ? Number(preset.amount).toLocaleString("ko-KR") : "";
   memoInput.value = state.modalMemo;
   dateInput.value = dateStr || ymd(new Date());
 
