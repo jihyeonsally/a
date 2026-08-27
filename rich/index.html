@@ -427,14 +427,7 @@
         <button class="chip" data-payer="hyeonje">현제</button>
         <button class="chip" data-payer="shared">우리</button>
       </div>
-      <div class="chip-row quick-add-row" id="quickAddRow" style="display:none;">
-        <button class="chip" data-quick-cat="transit" data-quick-memo="스윙">🚲 스윙</button>
-        <button class="chip" data-quick-cat="cafe">☕ 카페</button>
-        <button class="chip" data-quick-cat="cafe" data-quick-amount="1500" data-ledger-only="hyeonje">🥤 메가커피</button>
-        <button class="chip" data-quick-cat="shopping">🛍️ 쇼핑</button>
-        <button class="chip" data-quick-cat="dining">🍽️ 외식</button>
-        <button class="chip" data-quick-cat="dues">🧾 회비</button>
-      </div>
+      <div class="chip-row quick-add-row" id="quickAddRow" style="display:none;"></div>
       <div class="navbtns">
         <button class="navbtn" id="dashPrevMonth">‹</button>
         <button class="navbtn" id="dashNextMonth">›</button>
@@ -932,16 +925,51 @@ document.getElementById("dashNextMonth").addEventListener("click", () => {
   listenDashboardMonth(state.currentLedger, state.dashDate);
 });
 
+// 가계부별 빠른 추가 버튼 (지현/현제 개인 가계부 대시보드 전용)
+const QUICK_ADD_BUTTONS = {
+  jihyeon: [
+    { icon: "🚲", label: "스윙", category: "transit", memo: "스윙" },
+    { icon: "☕", label: "카페", category: "cafe" },
+    { icon: "🛍️", label: "쇼핑", category: "shopping" },
+    { icon: "🍽️", label: "외식", category: "dining" },
+    { icon: "🧾", label: "회비", category: "dues" },
+  ],
+  hyeonje: [
+    { icon: "🥤", label: "메가커피", category: "cafe", amount: 1500 },
+    { icon: "🍱", label: "점심", category: "lunch" },
+    { icon: "🏪", label: "편의점", category: "convenience" },
+    { icon: "🍽️", label: "외식", category: "dining" },
+    { icon: "🧾", label: "회비", category: "dues", amount: 30000, dateMode: "firstOfMonth" },
+  ],
+};
+
+function renderQuickAddRow() {
+  const wrap = document.getElementById("quickAddRow");
+  const buttons = QUICK_ADD_BUTTONS[state.currentLedger] || [];
+  wrap.innerHTML = buttons.map((b, i) => `<button class="chip" data-idx="${i}">${b.icon} ${b.label}</button>`).join("");
+  wrap.querySelectorAll(".chip").forEach((chip, i) => {
+    chip.addEventListener("click", () => {
+      const b = buttons[i];
+      let dateStr;
+      if (b.dateMode === "firstOfMonth") {
+        const y = state.dashDate.getFullYear();
+        const m = String(state.dashDate.getMonth() + 1).padStart(2, "0");
+        dateStr = `${y}-${m}-01`;
+      } else {
+        dateStr = ymd(new Date());
+      }
+      openModal(dateStr, { category: b.category, memo: b.memo || "", amount: b.amount || "" });
+    });
+  });
+}
+
 function renderPayerFilter() {
   const wrap = document.getElementById("payerFilter");
   const quickAddRow = document.getElementById("quickAddRow");
   if (state.currentLedger !== "shared") {
     wrap.style.display = "none";
     quickAddRow.style.display = "flex";
-    quickAddRow.querySelectorAll(".chip").forEach(chip => {
-      const only = chip.dataset.ledgerOnly;
-      chip.style.display = (!only || only === state.currentLedger) ? "" : "none";
-    });
+    renderQuickAddRow();
     return;
   }
   quickAddRow.style.display = "none";
@@ -950,16 +978,6 @@ function renderPayerFilter() {
     chip.classList.toggle("active", state.dashPayerFilter.has(chip.dataset.payer));
   });
 }
-
-document.getElementById("quickAddRow").addEventListener("click", (e) => {
-  const chip = e.target.closest(".chip");
-  if (!chip) return;
-  openModal(ymd(new Date()), {
-    category: chip.dataset.quickCat,
-    memo: chip.dataset.quickMemo || "",
-    amount: chip.dataset.quickAmount || "",
-  });
-});
 
 document.getElementById("payerFilter").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
