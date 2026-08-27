@@ -347,6 +347,11 @@
     cursor:pointer;
   }
   .delete-entry-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .duplicate-entry-btn{
+    width:100%; padding: 14px 0; border:1px solid var(--accent); border-radius:14px;
+    background: none; color: var(--accent); font-family:inherit; font-weight:700; font-size:14px;
+    cursor:pointer;
+  }
   .close-btn{
     position:absolute; top:16px; right:20px; border:none; background:none;
     font-size:20px; color: var(--text-dim); cursor:pointer;
@@ -503,6 +508,7 @@
 
     <div class="sheet-footer">
       <button class="save-btn" id="saveBtn" disabled>저장</button>
+      <button class="duplicate-entry-btn" id="duplicateEntryBtn" style="display:none;">복제</button>
       <button class="delete-entry-btn" id="deleteEntryBtn" style="display:none;">내역 삭제</button>
     </div>
   </div>
@@ -1219,12 +1225,13 @@ const memoInput = document.getElementById("memoInput");
 const saveBtn = document.getElementById("saveBtn");
 const sheetTitle = document.getElementById("sheetTitle");
 const deleteEntryBtn = document.getElementById("deleteEntryBtn");
+const duplicateEntryBtn = document.getElementById("duplicateEntryBtn");
 
 function openModal(dateStr, preset) {
   state.editingEntry = null;
-  state.modalType = "expense";
-  state.modalTargetLedger = state.currentLedger;
-  state.modalPayer = "shared";
+  state.modalType = (preset && preset.type) || "expense";
+  state.modalTargetLedger = (preset && preset.targetLedger) || state.currentLedger;
+  state.modalPayer = (preset && preset.payer) || "shared";
   state.modalCategory = (preset && preset.category) || (state.modalTargetLedger === "shared" ? "groceries" : null);
   state.modalMemo = (preset && preset.memo) || "";
 
@@ -1232,11 +1239,12 @@ function openModal(dateStr, preset) {
   memoInput.value = state.modalMemo;
   dateInput.value = dateStr || ymd(new Date());
 
-  document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === "expense"));
+  document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === state.modalType));
 
   sheetTitle.textContent = "내역 추가";
   saveBtn.textContent = "저장";
   deleteEntryBtn.style.display = "none";
+  duplicateEntryBtn.style.display = "none";
 
   renderTargetLedgerChips();
   updatePayerFieldVisibility();
@@ -1263,6 +1271,7 @@ function openEditModal(entry, ledgerId) {
   sheetTitle.textContent = "내역 수정";
   saveBtn.textContent = "저장";
   deleteEntryBtn.style.display = "block";
+  duplicateEntryBtn.style.display = "block";
 
   renderTargetLedgerChips();
   updatePayerFieldVisibility();
@@ -1409,6 +1418,18 @@ deleteEntryBtn.addEventListener("click", async () => {
     deleteEntryBtn.disabled = false;
     updateSaveEnabled();
   }
+});
+
+duplicateEntryBtn.addEventListener("click", () => {
+  if (!state.editingEntry) return;
+  openModal(ymd(new Date()), {
+    type: state.modalType,
+    targetLedger: state.modalTargetLedger,
+    payer: state.modalPayer,
+    category: state.modalCategory,
+    memo: state.modalMemo,
+    amount: currentAmount(),
+  });
 });
 
 /* ====================== 메모 검색 ====================== */
