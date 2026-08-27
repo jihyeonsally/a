@@ -38,6 +38,7 @@
     color: var(--text);
     font-family: "IBM Plex Sans KR", -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
   .mono{ font-family: "Space Mono", monospace; }
   #app{
@@ -275,12 +276,22 @@
   .overlay{
     position: fixed; inset:0; background: rgba(31,46,42,0.4);
     display:none; align-items:flex-end; justify-content:center; z-index: 50;
+    overflow-x:hidden;
   }
   .overlay.show{ display:flex; }
   .sheet{
     background: var(--bg); width:100%; max-width:640px;
-    border-radius: 24px 24px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
-    max-height: 90vh; overflow-y:auto;
+    border-radius: 24px 24px 0 0;
+    max-height: 90vh;
+    display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  .sheet-header{ position:relative; padding: 20px 20px 0; flex-shrink:0; }
+  .sheet-body{ padding: 0 20px 20px; overflow-y:auto; overflow-x:hidden; flex:1; min-height:0; }
+  .sheet-footer{
+    flex-shrink:0; display:flex; flex-direction:column; gap:10px;
+    padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--border); background: var(--bg);
   }
   .sheet-handle{ width:36px; height:4px; background: var(--border); border-radius:2px; margin: 0 auto 16px; }
   .sheet h3{ margin: 0 0 18px; font-size:17px; font-weight:700; text-align:center; }
@@ -323,13 +334,13 @@
   .search-date{ font-size:11px; color: var(--text-dim); width:34px; flex-shrink:0; }
 
   .save-btn{
-    width:100%; margin-top:22px; padding: 15px 0; border:none; border-radius:14px;
+    width:100%; padding: 15px 0; border:none; border-radius:14px;
     background: var(--accent); color:#fff; font-family:inherit; font-weight:700; font-size:15px;
     cursor:pointer;
   }
   .save-btn:disabled{ background: var(--border); color: var(--text-dim); cursor:not-allowed; }
   .delete-entry-btn{
-    width:100%; margin-top:10px; padding: 14px 0; border:1px solid var(--expense); border-radius:14px;
+    width:100%; padding: 14px 0; border:1px solid var(--expense); border-radius:14px;
     background: none; color: var(--expense); font-family:inherit; font-weight:700; font-size:14px;
     cursor:pointer;
   }
@@ -338,7 +349,6 @@
     position:absolute; top:16px; right:20px; border:none; background:none;
     font-size:20px; color: var(--text-dim); cursor:pointer;
   }
-  .sheet{ position:relative; }
 
   .sync-badge{
     position:fixed; top:10px; left:50%; transform:translateX(-50%);
@@ -450,53 +460,61 @@
 <!-- Entry modal -->
 <div class="overlay" id="overlay">
   <div class="sheet">
-    <button class="close-btn" id="closeSheet">✕</button>
-    <div class="sheet-handle"></div>
-    <h3 id="sheetTitle">내역 추가</h3>
-
-    <input type="text" inputmode="numeric" class="amount-input mono" id="amountInput" placeholder="0" />
-
-    <div class="segmented" id="typeSegment">
-      <button data-type="expense" class="active expense">지출</button>
-      <button data-type="income" class="income">수입</button>
+    <div class="sheet-header">
+      <button class="close-btn" id="closeSheet">✕</button>
+      <div class="sheet-handle"></div>
+      <h3 id="sheetTitle">내역 추가</h3>
     </div>
 
-    <div class="field-label">날짜</div>
-    <input type="date" id="dateInput" />
+    <div class="sheet-body">
+      <input type="text" inputmode="numeric" class="amount-input mono" id="amountInput" placeholder="0" />
 
-    <div class="field-label">어느 가계부에 추가할까요?</div>
-    <div class="chip-row" id="targetLedgerChips"></div>
-
-    <div id="payerFieldWrap">
-      <div class="field-label">결제자</div>
-      <div class="chip-row" id="payerChips">
-        <button class="chip" data-payer="jihyeon">지현</button>
-        <button class="chip" data-payer="hyeonje">현제</button>
-        <button class="chip active" data-payer="shared">우리</button>
+      <div class="segmented" id="typeSegment">
+        <button data-type="expense" class="active expense">지출</button>
+        <button data-type="income" class="income">수입</button>
       </div>
+
+      <div class="field-label">날짜</div>
+      <input type="date" id="dateInput" />
+
+      <div class="field-label">어느 가계부에 추가할까요?</div>
+      <div class="chip-row" id="targetLedgerChips"></div>
+
+      <div id="payerFieldWrap">
+        <div class="field-label">결제자</div>
+        <div class="chip-row" id="payerChips">
+          <button class="chip" data-payer="jihyeon">지현</button>
+          <button class="chip" data-payer="hyeonje">현제</button>
+          <button class="chip active" data-payer="shared">우리</button>
+        </div>
+      </div>
+
+      <div class="field-label">메모</div>
+      <input type="text" id="memoInput" maxlength="10" placeholder="메모 입력" />
+
+      <div class="field-label">카테고리</div>
+      <div class="chip-row" id="categoryChips"></div>
     </div>
 
-    <div class="field-label">메모</div>
-    <input type="text" id="memoInput" maxlength="10" placeholder="메모 입력" />
-
-    <div class="field-label">카테고리</div>
-    <div class="chip-row" id="categoryChips"></div>
-
-    <button class="save-btn" id="saveBtn" disabled>저장</button>
-    <button class="delete-entry-btn" id="deleteEntryBtn" style="display:none;">내역 삭제</button>
+    <div class="sheet-footer">
+      <button class="save-btn" id="saveBtn" disabled>저장</button>
+      <button class="delete-entry-btn" id="deleteEntryBtn" style="display:none;">내역 삭제</button>
+    </div>
   </div>
 </div>
 
 <!-- 메모 검색 -->
 <div class="overlay" id="searchOverlay">
   <div class="sheet">
-    <button class="close-btn" id="closeSearchSheet">✕</button>
-    <div class="sheet-handle"></div>
-    <h3>메모 검색</h3>
-
-    <input type="text" id="searchInput" placeholder="메모로 검색" />
-
-    <div class="search-results" id="searchResults"></div>
+    <div class="sheet-header">
+      <button class="close-btn" id="closeSearchSheet">✕</button>
+      <div class="sheet-handle"></div>
+      <h3>메모 검색</h3>
+    </div>
+    <div class="sheet-body">
+      <input type="text" id="searchInput" placeholder="메모로 검색" />
+      <div class="search-results" id="searchResults"></div>
+    </div>
   </div>
 </div>
 
