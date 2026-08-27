@@ -524,7 +524,17 @@ const LEDGERS = [
   { id: "hyeonje", label: "현제 가계부", color: "#5B7FA6" },
 ];
 
-const CATEGORIES = {
+const INCOME_CATEGORIES = [
+  { id: "salary",   label: "급여",       icon: "💰", color: "#4B8060" },
+  { id: "bonus",    label: "보너스",     icon: "🎉", color: "#3D8B6E" },
+  { id: "extra",    label: "부수입",     icon: "➕", color: "#5A9C7A" },
+  { id: "allowance",label: "용돈",       icon: "👛", color: "#79A88F" },
+  { id: "interest", label: "배당/이자",  icon: "🏦", color: "#6FA593" },
+  { id: "etc_i",    label: "기타",       icon: "📦", color: "#A6998A" },
+];
+
+// 공용 가계부 카테고리
+const CATEGORIES_SHARED = {
   expense: [
     { id: "groceries",    label: "식료품",     icon: "🥦", color: "#C1553F" },
     { id: "dining",       label: "외식/배달",  icon: "🍽️", color: "#E08A5B" },
@@ -537,21 +547,41 @@ const CATEGORIES = {
     { id: "housing",      label: "주거비",     icon: "🏠", color: "#8A7355" },
     { id: "telecom",      label: "통신비",     icon: "📱", color: "#7C8FA6" },
     { id: "subscription", label: "구독료",     icon: "📺", color: "#9B7EC9" },
-    { id: "travel",       label: "여행",       icon: "✈️", color: "#5B9BD5" },
     { id: "event",        label: "경조사",     icon: "🎁", color: "#C9974A" },
     { id: "gift",         label: "선물",       icon: "🎀", color: "#E0A9BE" },
     { id: "culture",      label: "문화생활",   icon: "🎬", color: "#7EAFC4" },
+    { id: "travel",       label: "여행",       icon: "✈️", color: "#5B9BD5" },
     { id: "pocketmoney",  label: "용돈",       icon: "👛", color: "#A6998A" },
   ],
-  income: [
-    { id: "salary",   label: "급여",       icon: "💰", color: "#4B8060" },
-    { id: "bonus",    label: "보너스",     icon: "🎉", color: "#3D8B6E" },
-    { id: "extra",    label: "부수입",     icon: "➕", color: "#5A9C7A" },
-    { id: "allowance",label: "용돈",       icon: "👛", color: "#79A88F" },
-    { id: "interest", label: "배당/이자",  icon: "🏦", color: "#6FA593" },
-    { id: "etc_i",    label: "기타",       icon: "📦", color: "#A6998A" },
-  ],
+  income: INCOME_CATEGORIES,
 };
+
+// 지현/현제 개인 가계부 카테고리
+const CATEGORIES_PERSONAL = {
+  expense: [
+    { id: "groceries",    label: "식료품",     icon: "🥦", color: "#C1553F" },
+    { id: "dining",       label: "외식/배달",  icon: "🍽️", color: "#E08A5B" },
+    { id: "cafe",         label: "카페",       icon: "☕", color: "#B8896A" },
+    { id: "convenience",  label: "편의점",     icon: "🏪", color: "#D9A257" },
+    { id: "shopping",     label: "쇼핑",       icon: "🛍️", color: "#C97B9B" },
+    { id: "beauty",       label: "미용",       icon: "💄", color: "#D98BB0" },
+    { id: "daily",        label: "생필품",     icon: "🧴", color: "#8FA37E" },
+    { id: "medical",      label: "병원/약",    icon: "💊", color: "#B95C5C" },
+    { id: "transit",      label: "교통비",     icon: "🚌", color: "#6B8CAE" },
+    { id: "subscription", label: "구독료",     icon: "📺", color: "#9B7EC9" },
+    { id: "dues",         label: "회비",       icon: "🧾", color: "#8E7CC3" },
+    { id: "event",        label: "경조사",     icon: "🎁", color: "#C9974A" },
+    { id: "gift",         label: "선물",       icon: "🎀", color: "#E0A9BE" },
+    { id: "culture",      label: "문화생활",   icon: "🎬", color: "#7EAFC4" },
+    { id: "education",    label: "교육",       icon: "📚", color: "#6FA8A0" },
+    { id: "travel",       label: "여행",       icon: "✈️", color: "#5B9BD5" },
+  ],
+  income: INCOME_CATEGORIES,
+};
+
+function categoriesForLedger(ledgerId) {
+  return ledgerId === "shared" ? CATEGORIES_SHARED : CATEGORIES_PERSONAL;
+}
 
 // 임의 카테고리 추가 기능(테스트용 "하이" 포함)에서 남은 localStorage 데이터 정리
 localStorage.removeItem("custom_categories_expense");
@@ -768,7 +798,7 @@ function renderDayDetail() {
   }
 
   listEl.innerHTML = dayEntries.map(e => {
-    const cat = (CATEGORIES[e.type] || []).find(c => c.id === e.category);
+    const cat = (categoriesForLedger(state.currentLedger)[e.type] || []).find(c => c.id === e.category);
     const icon = cat ? cat.icon : "📦";
     const name = cat ? cat.label : e.category;
     const sign = e.type === "expense" ? "-" : "+";
@@ -1022,7 +1052,7 @@ function renderDashboard() {
     }
   }
 
-  const cats = CATEGORIES[state.dashType];
+  const cats = categoriesForLedger(state.currentLedger)[state.dashType];
   const totals = {};
   const entriesByCat = {};
   cats.forEach(c => { totals[c.id] = 0; entriesByCat[c.id] = []; });
@@ -1205,16 +1235,19 @@ function renderTargetLedgerChips() {
   el.querySelectorAll(".chip").forEach(chip => {
     chip.addEventListener("click", () => {
       state.modalTargetLedger = chip.dataset.ledger;
+      state.modalCategory = null;
       el.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
       chip.classList.add("active");
       updatePayerFieldVisibility();
+      renderCategoryChips();
+      updateSaveEnabled();
     });
   });
 }
 
 function renderCategoryChips() {
   const el = document.getElementById("categoryChips");
-  const cats = CATEGORIES[state.modalType];
+  const cats = categoriesForLedger(state.modalTargetLedger)[state.modalType];
   el.innerHTML = cats.map(c => `
     <button class="chip ${c.id === state.modalCategory ? "active" : ""}" data-cat="${c.id}">${c.icon} ${c.label}</button>
   `).join("");
@@ -1337,7 +1370,7 @@ function renderSearchResults() {
   }
 
   searchResults.innerHTML = matched.map(e => {
-    const cat = (CATEGORIES[e.type] || []).find(c => c.id === e.category);
+    const cat = (categoriesForLedger(state.currentLedger)[e.type] || []).find(c => c.id === e.category);
     const icon = cat ? cat.icon : "📦";
     const name = cat ? cat.label : e.category;
     const sign = e.type === "expense" ? "-" : "+";
