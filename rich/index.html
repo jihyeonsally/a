@@ -264,6 +264,11 @@
   }
   .donut-callout .icon{ font-size:13px; }
   .dash-empty{ text-align:center; color: var(--text-dim); font-size:13px; padding: 24px 0; }
+  .dash-warning{
+    margin: 0 16px 12px; padding: 10px 14px; border-radius: var(--radius-sm);
+    background: var(--expense-soft); color: var(--expense); font-weight:700; font-size:13px;
+    text-align:center;
+  }
 
   .cat-list{ margin: 0 16px; display:flex; flex-direction:column; gap:8px; }
   .cat-row-wrap{
@@ -465,6 +470,7 @@
         <button class="navbtn" id="dashNextMonth">›</button>
       </div>
     </div>
+    <div class="dash-warning" id="dashWarning" style="display:none;">⚠️ 과소비 주의 !!</div>
     <div class="dash-card">
       <div class="chart-wrap">
         <div class="donut-wrap">
@@ -580,6 +586,8 @@ const LEDGERS = [
   { id: "hyeonje", label: "현제 가계부", color: "#5B7FA6" },
 ];
 
+const PERSONAL_ALLOWANCE = 500000; // 지현/현제 개인 가계부는 수입 대신 고정 용돈으로 계산
+
 const INCOME_CATEGORIES = [
   { id: "salary",   label: "급여",       icon: "💰", color: "#4B8060" },
   { id: "bonus",    label: "보너스",     icon: "🎉", color: "#3D8B6E" },
@@ -618,7 +626,6 @@ const CATEGORIES_SHARED = {
     { id: "subscription_housing", label: "청약", icon: "🏘️", color: "#A78BD9" },
     { id: "pension",     label: "연금",       icon: "🧓", color: "#7E6BA6" },
     { id: "gold",        label: "금현물",     icon: "🥇", color: "#C9A227" },
-    { id: "coin",        label: "코인",       icon: "🪙", color: "#B8860B" },
   ],
 };
 
@@ -671,6 +678,13 @@ function categoriesForLedger(ledgerId) {
   if (ledgerId === "shared") return CATEGORIES_SHARED;
   if (ledgerId === "hyeonje") return CATEGORIES_HYEONJE;
   return CATEGORIES_JIHYEON;
+}
+
+// 내역 추가 시 타입별로 기본 선택될 카테고리 (수입→급여, 투자→ISA, 공용 지출→식료품)
+function defaultCategoryFor(targetLedger, type) {
+  const cats = categoriesForLedger(targetLedger)[type] || [];
+  const preferred = type === "income" ? "salary" : type === "investment" ? "isa" : (targetLedger === "shared" ? "groceries" : null);
+  return (preferred && cats.some(c => c.id === preferred)) ? preferred : null;
 }
 
 // 임의 카테고리 추가 기능(테스트용 "하이" 포함)에서 남은 localStorage 데이터 정리
@@ -767,7 +781,7 @@ function switchLedger(id) {
   state.dashExpandedCats = new Set();
   state.calEntries = [];
   state.dashEntries = [];
-  if (id !== "shared" && state.dashType === "investment") {
+  if (id !== "shared" && (state.dashType === "investment" || state.dashType === "income")) {
     state.dashType = "expense";
     document.getElementById("dashExpenseBtn").classList.add("active");
     document.getElementById("dashIncomeBtn").classList.remove("active");
@@ -790,10 +804,12 @@ function renderLedgerToggle() {
   });
 }
 
-// 투자 항목은 공용 가계부에서만 관리하므로, 대시보드 타입 토글의 "투자" 버튼은
-// 공용 가계부를 보고 있을 때만 노출한다.
+// 투자/수입 항목은 공용 가계부에서만 관리하므로 (지현/현제는 지출만 기록),
+// 대시보드 타입 토글의 "투자"/"수입" 버튼은 공용 가계부를 보고 있을 때만 노출한다.
 function updateDashTypeVisibility() {
-  document.getElementById("dashInvestmentBtn").style.display = state.currentLedger === "shared" ? "" : "none";
+  const isShared = state.currentLedger === "shared";
+  document.getElementById("dashInvestmentBtn").style.display = isShared ? "" : "none";
+  document.getElementById("dashIncomeBtn").style.display = isShared ? "" : "none";
 }
 
 document.querySelectorAll(".ledger-toggle-btn").forEach(btn => {
@@ -950,6 +966,7 @@ function renderMonthSummary() {
     else expense += Number(e.amount);
   });
   const isShared = state.currentLedger === "shared";
+  if (!isShared) income = PERSONAL_ALLOWANCE; // 지현/현제는 수입 대신 고정 용돈을 표시
   const expenseText = `${fmtNum(expense)}원`;
   const incomeText = `${fmtNum(income)}원`;
   const investmentText = `${fmtNum(investment)}원`;
@@ -1228,17 +1245,23 @@ function renderDashboard() {
   const totalAmount = filtered.reduce((sum, e) => sum + Number(e.amount), 0);
   document.getElementById("dashTotal").textContent = `${fmtNum(totalAmount)}원`;
 
-  // 지출 대시보드에서는 도넛의 100%가 "전체 수입"이 되도록, 남은 돈(수입-지출)을 별도 조각으로 채운다
+  // 지출 대시보드에서는 도넛의 100%가 "전체 수입"이 되도록, 남은 돈(수입-지출)을 별도 조각으로 채운다.
+  // 지현/현제는 수입 내역이 없으므로 고정 용돈(50만원)을 기준으로 삼는다.
+  const isShared = state.currentLedger === "shared";
   let remainingShare = 0;
   let donutDenom = totalAmount;
+  let overspendWarning = false;
   if (state.dashType === "expense") {
-    const totalIncomeSum = applyPayerFilter(state.dashEntries.filter(e => e.type === "income"))
-      .reduce((sum, e) => sum + Number(e.amount), 0);
-    donutDenom = Math.max(totalIncomeSum, totalAmount);
+    const baselineIncome = isShared
+      ? applyPayerFilter(state.dashEntries.filter(e => e.type === "income")).reduce((sum, e) => sum + Number(e.amount), 0)
+      : PERSONAL_ALLOWANCE;
+    donutDenom = Math.max(baselineIncome, totalAmount);
     if (donutDenom > 0) {
-      remainingShare = Math.max(0, totalIncomeSum - totalAmount) / donutDenom;
+      remainingShare = Math.max(0, baselineIncome - totalAmount) / donutDenom;
     }
+    if (!isShared && totalAmount > PERSONAL_ALLOWANCE) overspendWarning = true;
   }
+  document.getElementById("dashWarning").style.display = overspendWarning ? "block" : "none";
 
   const cats = categoriesForLedger(state.currentLedger)[state.dashType] || [];
   const totals = {};
@@ -1325,7 +1348,7 @@ function openModal(dateStr, preset) {
   state.modalType = (preset && preset.type) || "expense";
   state.modalTargetLedger = (preset && preset.targetLedger) || state.currentLedger;
   state.modalPayer = (preset && preset.payer) || "jihyeon";
-  state.modalCategory = (preset && preset.category) || (state.modalTargetLedger === "shared" ? "groceries" : null);
+  state.modalCategory = (preset && preset.category) || defaultCategoryFor(state.modalTargetLedger, state.modalType);
   state.modalMemo = (preset && preset.memo) || "";
 
   amountInput.value = (preset && preset.amount) ? Number(preset.amount).toLocaleString("ko-KR") : "";
@@ -1387,16 +1410,18 @@ function updatePayerFieldVisibility() {
   }
 }
 
-// 투자 항목은 공용 가계부에서만 입력하므로, 추가 대상 가계부가 공용일 때만
-// "투자" 타입 버튼을 노출한다. 공용이 아닌 가계부로 바뀌면서 투자가 선택돼
-// 있었다면 지출로 되돌린다.
+// 지현/현제 가계부는 지출만 기록하므로, 추가 대상 가계부가 공용일 때만
+// 지출/수입/투자 타입 선택 UI 자체를 노출한다. 공용이 아닌 가계부로 바뀌면
+// 자동으로 지출로 고정한다.
 function updateTypeSegmentVisibility() {
+  const segment = document.getElementById("typeSegment");
   const investBtn = document.getElementById("typeInvestmentBtn");
   const isShared = state.modalTargetLedger === "shared";
+  segment.style.display = isShared ? "flex" : "none";
   investBtn.style.display = isShared ? "" : "none";
-  if (!isShared && state.modalType === "investment") {
+  if (!isShared && state.modalType !== "expense") {
     state.modalType = "expense";
-    state.modalCategory = null;
+    state.modalCategory = defaultCategoryFor(state.modalTargetLedger, state.modalType);
     document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === state.modalType));
   }
 }
@@ -1419,7 +1444,7 @@ amountInput.addEventListener("input", () => {
 document.querySelectorAll("#typeSegment button").forEach(btn => {
   btn.addEventListener("click", () => {
     state.modalType = btn.dataset.type;
-    state.modalCategory = null;
+    state.modalCategory = defaultCategoryFor(state.modalTargetLedger, state.modalType);
     document.querySelectorAll("#typeSegment button").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     renderCategoryChips();
@@ -1446,10 +1471,10 @@ function renderTargetLedgerChips() {
   el.querySelectorAll(".chip").forEach(chip => {
     chip.addEventListener("click", () => {
       state.modalTargetLedger = chip.dataset.ledger;
-      state.modalCategory = chip.dataset.ledger === "shared" ? "groceries" : null;
       el.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
       chip.classList.add("active");
-      updateTypeSegmentVisibility();
+      updateTypeSegmentVisibility(); // 공용이 아니면 지출로 고정
+      state.modalCategory = defaultCategoryFor(state.modalTargetLedger, state.modalType);
       updatePayerFieldVisibility();
       renderCategoryChips();
       updateSaveEnabled();
