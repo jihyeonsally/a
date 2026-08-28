@@ -151,9 +151,12 @@
   .day-cell.selected{ background: var(--accent-soft); border-color: var(--accent); }
   .day-num{ font-size:12px; font-weight:600; color: var(--text); text-align:center; }
   .day-cell.today .day-num{ color: var(--accent); }
-  .day-entries{ display:flex; flex-direction:column; align-items:center; gap:2px; width:100%; }
+  .day-entries{
+    display:flex; flex-direction:row; flex-wrap:nowrap; align-items:center; justify-content:center;
+    gap:4px; width:100%; overflow:hidden; font-size:9px;
+  }
   .day-line{
-    font-size:9px; line-height:1.3; overflow:hidden; text-overflow:ellipsis;
+    font-size:inherit; line-height:1.3; overflow:hidden; text-overflow:ellipsis;
     white-space:nowrap; font-weight:600; text-align:center; max-width:100%;
   }
   .day-line.expense{ color: var(--expense); }
@@ -854,10 +857,20 @@ function renderCalendar() {
       else expenseTotal += Number(e.amount);
     });
 
-    let linesHtml = "";
-    if (expenseTotal > 0) linesHtml += `<div class="day-line expense">-${fmtNum(expenseTotal)}</div>`;
-    if (incomeTotal > 0) linesHtml += `<div class="day-line income">+${fmtNum(incomeTotal)}</div>`;
-    if (investmentTotal > 0) linesHtml += `<div class="day-line investment">-${fmtNum(investmentTotal)}</div>`;
+    const dayParts = [];
+    if (expenseTotal > 0) dayParts.push({ cls: "expense", text: `-${fmtNum(expenseTotal)}` });
+    if (incomeTotal > 0) dayParts.push({ cls: "income", text: `+${fmtNum(incomeTotal)}` });
+    if (investmentTotal > 0) dayParts.push({ cls: "investment", text: `$${fmtNum(investmentTotal)}` });
+
+    // 금액 자릿수가 늘어나면 한 줄에 다 들어오도록 폰트 크기를 줄인다.
+    const totalLen = dayParts.reduce((sum, p) => sum + p.text.length, 0);
+    let entriesFontSize = 9;
+    if (totalLen > 20) entriesFontSize = 6;
+    else if (totalLen > 16) entriesFontSize = 6.5;
+    else if (totalLen > 12) entriesFontSize = 7;
+    else if (totalLen > 8) entriesFontSize = 8;
+
+    const linesHtml = dayParts.map(p => `<div class="day-line ${p.cls}">${p.text}</div>`).join("");
 
     const dow = (firstDay + day - 1) % 7;
     const wdClass = weekdayClass(dow);
@@ -865,7 +878,7 @@ function renderCalendar() {
     html += `
       <div class="day-cell ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}" data-date="${dateStr}">
         <span class="day-num ${wdClass}">${day}</span>
-        <div class="day-entries">${linesHtml}</div>
+        <div class="day-entries" style="font-size:${entriesFontSize}px;">${linesHtml}</div>
       </div>`;
   }
 
