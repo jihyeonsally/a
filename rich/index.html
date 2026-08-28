@@ -26,6 +26,8 @@
     --expense-soft: #FBD9E3;
     --income: #2F9E75;
     --income-soft: #D9F0E3;
+    --invest: #7C5CBF;
+    --invest-soft: #E9E1F7;
     --border: #D4EFE6;
     --saturday: #3B6FD6;
     --sunday: #D64545;
@@ -97,9 +99,12 @@
   .summary-label{ font-weight:600; color: var(--text-dim); }
   .summary-label.income{ color: var(--income); }
   .summary-label.expense{ color: var(--expense); }
+  .summary-label.investment{ color: var(--invest); }
   .summary-amt{ font-weight:600; color: var(--text-dim); }
   .summary-amt.income{ color: var(--income); }
   .summary-amt.expense{ color: var(--expense); }
+  .summary-amt.investment{ color: var(--invest); }
+  .summary-row.summary-row-invest{ grid-template-columns: 1fr; margin-top:-3px; }
 
   /* ---------- Calendar screen ---------- */
   .month-nav{
@@ -153,6 +158,7 @@
   }
   .day-line.expense{ color: var(--expense); }
   .day-line.income{ color: var(--income); }
+  .day-line.investment{ color: var(--invest); }
 
   /* ---------- Day detail panel ---------- */
   .day-detail{ margin: 12px 16px 20px; }
@@ -173,6 +179,7 @@
   .day-detail-row .amt{ font-weight:700; font-size:14px; }
   .day-detail-row .amt.expense{ color: var(--expense); }
   .day-detail-row .amt.income{ color: var(--income); }
+  .day-detail-row .amt.investment{ color: var(--invest); }
 
   /* ---------- Bottom tab bar ---------- */
   .tabbar{
@@ -217,6 +224,7 @@
   }
   .dash-type-toggle button.active.expense{ background: var(--expense); color:#fff; }
   .dash-type-toggle button.active.income{ background: var(--income); color:#fff; }
+  .dash-type-toggle button.active.investment{ background: var(--invest); color:#fff; }
 
   .payer-nav-row{
     display:flex; align-items:center; gap:8px; padding: 0 16px 16px;
@@ -264,6 +272,7 @@
   .cat-row .amt{ font-weight:700; font-size:14px; }
   .cat-row .amt.expense{ color: var(--expense); }
   .cat-row .amt.income{ color: var(--income); }
+  .cat-row .amt.investment{ color: var(--invest); }
   .cat-row .chevron{ font-size:10px; color: var(--text-dim); flex-shrink:0; }
 
   .cat-entries{ border-top:1px solid var(--border); padding: 4px 14px 8px; }
@@ -277,6 +286,7 @@
   .cat-entry-row .amt{ font-weight:600; font-size:13px; }
   .cat-entry-row .amt.expense{ color: var(--expense); }
   .cat-entry-row .amt.income{ color: var(--income); }
+  .cat-entry-row .amt.investment{ color: var(--invest); }
 
   /* ---------- Modal ---------- */
   .overlay{
@@ -317,6 +327,7 @@
   }
   .segmented button.active.expense{ background: var(--expense-soft); color: var(--expense); border-color: var(--expense); }
   .segmented button.active.income{ background: var(--income-soft); color: var(--income); border-color: var(--income); }
+  .segmented button.active.investment{ background: var(--invest-soft); color: var(--invest); border-color: var(--invest); }
 
   .field-label{ font-size:12px; font-weight:700; color: var(--text-dim); margin: 14px 0 8px; }
 
@@ -401,6 +412,12 @@
           <span class="summary-amt income mono" id="summaryIncome">0원</span>
         </span>
       </div>
+      <div class="summary-row summary-row-invest" id="summaryInvestRow" style="display:none;">
+        <span class="summary-item">
+          <span class="summary-label investment">◆ 투자</span>
+          <span class="summary-amt investment mono" id="summaryInvestment">0원</span>
+        </span>
+      </div>
     </div>
     <div class="month-nav">
       <h2 id="monthLabel"></h2>
@@ -427,6 +444,7 @@
       <div class="dash-type-toggle">
         <button id="dashExpenseBtn" class="active expense">지출</button>
         <button id="dashIncomeBtn" class="income">수입</button>
+        <button id="dashInvestmentBtn" class="investment" style="display:none;">투자</button>
       </div>
     </div>
     <div class="payer-nav-row">
@@ -434,7 +452,6 @@
         <button class="chip" data-payer="all">모두</button>
         <button class="chip" data-payer="jihyeon">지현</button>
         <button class="chip" data-payer="hyeonje">현제</button>
-        <button class="chip" data-payer="shared">우리</button>
       </div>
       <div class="chip-row quick-add-row" id="quickAddRow" style="display:none;"></div>
       <div class="navbtns">
@@ -484,6 +501,7 @@
       <div class="segmented" id="typeSegment">
         <button data-type="expense" class="active expense">지출</button>
         <button data-type="income" class="income">수입</button>
+        <button data-type="investment" class="investment" id="typeInvestmentBtn" style="display:none;">투자</button>
       </div>
 
       <div class="field-label">날짜</div>
@@ -497,9 +515,8 @@
       <div id="payerFieldWrap">
         <div class="field-label">결제자</div>
         <div class="chip-row" id="payerChips">
-          <button class="chip" data-payer="jihyeon">지현</button>
+          <button class="chip active" data-payer="jihyeon">지현</button>
           <button class="chip" data-payer="hyeonje">현제</button>
-          <button class="chip active" data-payer="shared">우리</button>
         </div>
       </div>
 
@@ -587,6 +604,10 @@ const CATEGORIES_SHARED = {
     { id: "pocketmoney",  label: "용돈",       icon: "👛", color: "#A6998A" },
   ],
   income: INCOME_CATEGORIES,
+  // 임시 카테고리 1개만 등록. 실제 투자 카테고리 목록은 추후 요청 예정.
+  investment: [
+    { id: "invest_etc", label: "투자", icon: "📈", color: "#7C5CBF" },
+  ],
 };
 
 // 지현 개인 가계부 카테고리
@@ -653,11 +674,11 @@ const state = {
   selectedDate: null,         // 달력에서 선택된 날짜 (YYYY-MM-DD)
   dashDate: new Date(),       // 대시보드 화면 기준 월
   dashType: "expense",
-  dashPayerFilter: new Set(["all"]), // 공용 가계부 대시보드 결제자 필터 ("all" | jihyeon/hyeonje/shared 조합)
+  dashPayerFilter: new Set(["all"]), // 공용 가계부 대시보드 결제자 필터 ("all" | jihyeon/hyeonje 조합)
   dashExpandedCats: new Set(), // 대시보드에서 펼쳐진 카테고리 id 목록
   modalType: "expense",
   modalTargetLedger: null,
-  modalPayer: "shared",
+  modalPayer: "jihyeon",
   modalCategory: null,
   modalMemo: "",
   editingEntry: null, // { original: entry, ledgerId } — set when the modal is editing an existing entry
@@ -734,7 +755,14 @@ function switchLedger(id) {
   state.dashExpandedCats = new Set();
   state.calEntries = [];
   state.dashEntries = [];
+  if (id !== "shared" && state.dashType === "investment") {
+    state.dashType = "expense";
+    document.getElementById("dashExpenseBtn").classList.add("active");
+    document.getElementById("dashIncomeBtn").classList.remove("active");
+    document.getElementById("dashInvestmentBtn").classList.remove("active");
+  }
   localStorage.setItem("ledger_selected", id);
+  updateDashTypeVisibility();
   renderLedgerToggle();
   renderCalendar();
   renderDayDetail();
@@ -748,6 +776,12 @@ function renderLedgerToggle() {
   document.querySelectorAll(".ledger-toggle-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.id === state.currentLedger);
   });
+}
+
+// 투자 항목은 공용 가계부에서만 관리하므로, 대시보드 타입 토글의 "투자" 버튼은
+// 공용 가계부를 보고 있을 때만 노출한다.
+function updateDashTypeVisibility() {
+  document.getElementById("dashInvestmentBtn").style.display = state.currentLedger === "shared" ? "" : "none";
 }
 
 document.querySelectorAll(".ledger-toggle-btn").forEach(btn => {
@@ -807,15 +841,17 @@ function renderCalendar() {
     const isToday = dateStr === todayStr;
     const isSelected = dateStr === state.selectedDate;
 
-    let expenseTotal = 0, incomeTotal = 0;
+    let expenseTotal = 0, incomeTotal = 0, investmentTotal = 0;
     dayEntries.forEach(e => {
-      if (e.type === "expense") expenseTotal += Number(e.amount);
-      else incomeTotal += Number(e.amount);
+      if (e.type === "income") incomeTotal += Number(e.amount);
+      else if (e.type === "investment") investmentTotal += Number(e.amount);
+      else expenseTotal += Number(e.amount);
     });
 
     let linesHtml = "";
     if (expenseTotal > 0) linesHtml += `<div class="day-line expense">-${fmtNum(expenseTotal)}</div>`;
     if (incomeTotal > 0) linesHtml += `<div class="day-line income">+${fmtNum(incomeTotal)}</div>`;
+    if (investmentTotal > 0) linesHtml += `<div class="day-line investment">-${fmtNum(investmentTotal)}</div>`;
 
     const dow = (firstDay + day - 1) % 7;
     const wdClass = weekdayClass(dow);
@@ -867,7 +903,7 @@ function renderDayDetail() {
     const cat = (categoriesForLedger(state.currentLedger)[e.type] || []).find(c => c.id === e.category);
     const icon = cat ? cat.icon : "📦";
     const name = cat ? cat.label : e.category;
-    const sign = e.type === "expense" ? "-" : "+";
+    const sign = e.type === "income" ? "+" : "-";
     return `
       <div class="day-detail-row" data-id="${e.id}">
         <span class="icon">${icon}</span>
@@ -885,14 +921,17 @@ function renderDayDetail() {
 }
 
 function renderMonthSummary() {
-  let income = 0, expense = 0;
+  let income = 0, expense = 0, investment = 0;
   state.calEntries.forEach(e => {
     if (e.type === "income") income += Number(e.amount);
+    else if (e.type === "investment") investment += Number(e.amount);
     else expense += Number(e.amount);
   });
   document.getElementById("summaryRemaining").textContent = `${fmtNum(income - expense)}원`;
   document.getElementById("summaryIncome").textContent = `${fmtNum(income)}원`;
   document.getElementById("summaryExpense").textContent = `${fmtNum(expense)}원`;
+  document.getElementById("summaryInvestment").textContent = `${fmtNum(investment)}원`;
+  document.getElementById("summaryInvestRow").style.display = state.currentLedger === "shared" ? "grid" : "none";
 }
 
 document.getElementById("prevMonth").addEventListener("click", () => {
@@ -920,6 +959,7 @@ document.getElementById("dashExpenseBtn").addEventListener("click", () => {
   state.dashExpandedCats = new Set();
   document.getElementById("dashExpenseBtn").classList.add("active");
   document.getElementById("dashIncomeBtn").classList.remove("active");
+  document.getElementById("dashInvestmentBtn").classList.remove("active");
   renderDashboard();
 });
 document.getElementById("dashIncomeBtn").addEventListener("click", () => {
@@ -927,6 +967,15 @@ document.getElementById("dashIncomeBtn").addEventListener("click", () => {
   state.dashExpandedCats = new Set();
   document.getElementById("dashIncomeBtn").classList.add("active");
   document.getElementById("dashExpenseBtn").classList.remove("active");
+  document.getElementById("dashInvestmentBtn").classList.remove("active");
+  renderDashboard();
+});
+document.getElementById("dashInvestmentBtn").addEventListener("click", () => {
+  state.dashType = "investment";
+  state.dashExpandedCats = new Set();
+  document.getElementById("dashInvestmentBtn").classList.add("active");
+  document.getElementById("dashExpenseBtn").classList.remove("active");
+  document.getElementById("dashIncomeBtn").classList.remove("active");
   renderDashboard();
 });
 document.getElementById("dashPrevMonth").addEventListener("click", () => {
@@ -1025,7 +1074,7 @@ function segmentLightness(index, count) {
 }
 
 function segmentShade(type, index, count) {
-  const hue = type === "expense" ? 340 : 150;
+  const hue = type === "expense" ? 340 : type === "investment" ? 265 : 150;
   return `hsl(${hue} 55% ${segmentLightness(index, count)}%)`;
 }
 
@@ -1132,6 +1181,7 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
 
 function renderDashboard() {
   renderPayerFilter();
+  updateDashTypeVisibility();
 
   const d = state.dashDate;
   const month = d.getMonth();
@@ -1160,7 +1210,7 @@ function renderDashboard() {
     }
   }
 
-  const cats = categoriesForLedger(state.currentLedger)[state.dashType];
+  const cats = categoriesForLedger(state.currentLedger)[state.dashType] || [];
   const totals = {};
   const entriesByCat = {};
   cats.forEach(c => { totals[c.id] = 0; entriesByCat[c.id] = []; });
@@ -1184,7 +1234,7 @@ function renderDashboard() {
     renderDonutChart(chartEl, calloutsEl, catsWithAmount, totals, donutDenom, state.dashType, remainingShare);
   }
 
-  const sign = state.dashType === "expense" ? "-" : "+";
+  const sign = state.dashType === "income" ? "+" : "-";
 
   document.getElementById("catList").innerHTML = catsWithAmount.map(c => {
     const expanded = state.dashExpandedCats.has(c.id);
@@ -1244,7 +1294,7 @@ function openModal(dateStr, preset) {
   state.editingEntry = null;
   state.modalType = (preset && preset.type) || "expense";
   state.modalTargetLedger = (preset && preset.targetLedger) || state.currentLedger;
-  state.modalPayer = (preset && preset.payer) || "shared";
+  state.modalPayer = (preset && preset.payer) || "jihyeon";
   state.modalCategory = (preset && preset.category) || (state.modalTargetLedger === "shared" ? "groceries" : null);
   state.modalMemo = (preset && preset.memo) || "";
 
@@ -1260,6 +1310,7 @@ function openModal(dateStr, preset) {
   duplicateEntryBtn.style.display = "none";
 
   renderTargetLedgerChips();
+  updateTypeSegmentVisibility();
   updatePayerFieldVisibility();
   renderCategoryChips();
   updateSaveEnabled();
@@ -1287,6 +1338,7 @@ function openEditModal(entry, ledgerId) {
   duplicateEntryBtn.style.display = "block";
 
   renderTargetLedgerChips();
+  updateTypeSegmentVisibility();
   updatePayerFieldVisibility();
   renderCategoryChips();
   updateSaveEnabled();
@@ -1302,6 +1354,20 @@ function updatePayerFieldVisibility() {
     // 지현/현제 가계부는 결제자가 가계부 주인으로 고정되므로 선택 UI 숨김
     wrap.style.display = "none";
     state.modalPayer = state.modalTargetLedger;
+  }
+}
+
+// 투자 항목은 공용 가계부에서만 입력하므로, 추가 대상 가계부가 공용일 때만
+// "투자" 타입 버튼을 노출한다. 공용이 아닌 가계부로 바뀌면서 투자가 선택돼
+// 있었다면 지출로 되돌린다.
+function updateTypeSegmentVisibility() {
+  const investBtn = document.getElementById("typeInvestmentBtn");
+  const isShared = state.modalTargetLedger === "shared";
+  investBtn.style.display = isShared ? "" : "none";
+  if (!isShared && state.modalType === "investment") {
+    state.modalType = "expense";
+    state.modalCategory = null;
+    document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === state.modalType));
   }
 }
 
@@ -1353,6 +1419,7 @@ function renderTargetLedgerChips() {
       state.modalCategory = chip.dataset.ledger === "shared" ? "groceries" : null;
       el.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
       chip.classList.add("active");
+      updateTypeSegmentVisibility();
       updatePayerFieldVisibility();
       renderCategoryChips();
       updateSaveEnabled();
@@ -1362,7 +1429,7 @@ function renderTargetLedgerChips() {
 
 function renderCategoryChips() {
   const el = document.getElementById("categoryChips");
-  const cats = categoriesForLedger(state.modalTargetLedger)[state.modalType];
+  const cats = categoriesForLedger(state.modalTargetLedger)[state.modalType] || [];
   el.innerHTML = cats.map(c => `
     <button class="chip ${c.id === state.modalCategory ? "active" : ""}" data-cat="${c.id}">${c.icon} ${c.label}</button>
   `).join("");
@@ -1500,7 +1567,7 @@ function renderSearchResults() {
     const cat = (categoriesForLedger(state.currentLedger)[e.type] || []).find(c => c.id === e.category);
     const icon = cat ? cat.icon : "📦";
     const name = cat ? cat.label : e.category;
-    const sign = e.type === "expense" ? "-" : "+";
+    const sign = e.type === "income" ? "+" : "-";
     const [y, m, d] = (e.date || "").split("-").map(Number);
     const dateLabel = m && d ? `<span class="${weekdayClass(new Date(y, m - 1, d).getDay())}">${m}/${d}</span>` : "";
     return `
@@ -1520,6 +1587,7 @@ searchInput.addEventListener("input", renderSearchResults);
 
 /* ====================== 초기화 ====================== */
 renderLedgerToggle();
+updateDashTypeVisibility();
 renderMonthSummary();
 listenCalendarMonth(state.currentLedger, state.calDate);
 listenDashboardMonth(state.currentLedger, state.dashDate);
