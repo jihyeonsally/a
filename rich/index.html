@@ -94,17 +94,22 @@
     cursor:pointer; font-size:15px; flex-shrink:0;
   }
   .search-btn:hover{ background: var(--accent-soft); }
-  .summary-row{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; padding: 3px 0; font-size:15px; }
-  .summary-item{ display:flex; align-items:center; gap:6px; }
-  .summary-label{ font-weight:600; color: var(--text-dim); }
+  .summary-row{
+    display:flex; flex-wrap:nowrap; align-items:center; justify-content:space-between;
+    gap:8px; padding: 3px 0; font-size:15px; overflow:hidden;
+  }
+  .summary-item{ display:flex; align-items:center; gap:4px; min-width:0; }
+  .summary-label{ font-weight:600; color: var(--text-dim); white-space:nowrap; flex-shrink:0; }
   .summary-label.income{ color: var(--income); }
   .summary-label.expense{ color: var(--expense); }
   .summary-label.investment{ color: var(--invest); }
-  .summary-amt{ font-weight:600; color: var(--text-dim); }
+  .summary-amt{
+    font-weight:600; color: var(--text-dim); white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
   .summary-amt.income{ color: var(--income); }
   .summary-amt.expense{ color: var(--expense); }
   .summary-amt.investment{ color: var(--invest); }
-  .summary-row.summary-row-invest{ grid-template-columns: 1fr; margin-top:-3px; }
 
   /* ---------- Calendar screen ---------- */
   .month-nav{
@@ -405,7 +410,7 @@
         <span class="summary-remaining mono" id="summaryRemaining">0원</span>
         <button class="search-btn" id="searchBtn" aria-label="메모 검색">🔍</button>
       </div>
-      <div class="summary-row">
+      <div class="summary-row" id="summaryRow">
         <span class="summary-item">
           <span class="summary-label expense">- 지출</span>
           <span class="summary-amt expense mono" id="summaryExpense">0원</span>
@@ -414,10 +419,8 @@
           <span class="summary-label income">+ 수입</span>
           <span class="summary-amt income mono" id="summaryIncome">0원</span>
         </span>
-      </div>
-      <div class="summary-row summary-row-invest" id="summaryInvestRow" style="display:none;">
-        <span class="summary-item">
-          <span class="summary-label investment">◆ 투자</span>
+        <span class="summary-item" id="summaryInvestItem" style="display:none;">
+          <span class="summary-label investment">$ 투자</span>
           <span class="summary-amt investment mono" id="summaryInvestment">0원</span>
         </span>
       </div>
@@ -946,11 +949,26 @@ function renderMonthSummary() {
     else if (e.type === "investment") investment += Number(e.amount);
     else expense += Number(e.amount);
   });
+  const isShared = state.currentLedger === "shared";
+  const expenseText = `${fmtNum(expense)}원`;
+  const incomeText = `${fmtNum(income)}원`;
+  const investmentText = `${fmtNum(investment)}원`;
+
   document.getElementById("summaryRemaining").textContent = `${fmtNum(income - expense)}원`;
-  document.getElementById("summaryIncome").textContent = `${fmtNum(income)}원`;
-  document.getElementById("summaryExpense").textContent = `${fmtNum(expense)}원`;
-  document.getElementById("summaryInvestment").textContent = `${fmtNum(investment)}원`;
-  document.getElementById("summaryInvestRow").style.display = state.currentLedger === "shared" ? "grid" : "none";
+  document.getElementById("summaryIncome").textContent = incomeText;
+  document.getElementById("summaryExpense").textContent = expenseText;
+  document.getElementById("summaryInvestment").textContent = investmentText;
+  document.getElementById("summaryInvestItem").style.display = isShared ? "flex" : "none";
+
+  // 금액 자릿수가 늘어나도 지출/수입/투자가 한 줄에 다 들어오도록 폰트 크기를 줄인다.
+  let summaryLen = "- 지출".length + expenseText.length + "+ 수입".length + incomeText.length;
+  if (isShared) summaryLen += "$ 투자".length + investmentText.length;
+  let summaryFontSize = 15;
+  if (summaryLen > 40) summaryFontSize = 11;
+  else if (summaryLen > 32) summaryFontSize = 12;
+  else if (summaryLen > 26) summaryFontSize = 13;
+  else if (summaryLen > 20) summaryFontSize = 14;
+  document.getElementById("summaryRow").style.fontSize = `${summaryFontSize}px`;
 }
 
 document.getElementById("prevMonth").addEventListener("click", () => {
