@@ -412,15 +412,15 @@
       </div>
       <div class="summary-row" id="summaryRow">
         <span class="summary-item">
-          <span class="summary-label expense">- 지출</span>
+          <span class="summary-label expense">-</span>
           <span class="summary-amt expense mono" id="summaryExpense">0원</span>
         </span>
         <span class="summary-item">
-          <span class="summary-label income">+ 수입</span>
+          <span class="summary-label income">+</span>
           <span class="summary-amt income mono" id="summaryIncome">0원</span>
         </span>
         <span class="summary-item" id="summaryInvestItem" style="display:none;">
-          <span class="summary-label investment">$ 투자</span>
+          <span class="summary-label investment">$</span>
           <span class="summary-amt investment mono" id="summaryInvestment">0원</span>
         </span>
       </div>
@@ -961,8 +961,8 @@ function renderMonthSummary() {
   document.getElementById("summaryInvestItem").style.display = isShared ? "flex" : "none";
 
   // 금액 자릿수가 늘어나도 지출/수입/투자가 한 줄에 다 들어오도록 폰트 크기를 줄인다.
-  let summaryLen = "- 지출".length + expenseText.length + "+ 수입".length + incomeText.length;
-  if (isShared) summaryLen += "$ 투자".length + investmentText.length;
+  let summaryLen = expenseText.length + incomeText.length;
+  if (isShared) summaryLen += investmentText.length;
   let summaryFontSize = 15;
   if (summaryLen > 40) summaryFontSize = 11;
   else if (summaryLen > 32) summaryFontSize = 12;
