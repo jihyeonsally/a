@@ -266,8 +266,8 @@
   .dash-empty{ text-align:center; color: var(--text-dim); font-size:13px; padding: 24px 0; }
   .dash-warning{
     margin: 0 16px 12px; padding: 10px 14px; border-radius: var(--radius-sm);
-    background: var(--expense-soft); color: var(--expense); font-weight:700; font-size:13px;
-    text-align:center;
+    background: #FFEA00; color: #B21807; font-weight:700; font-size:13px;
+    text-align:center; box-shadow: 0 0 0 1px #FFC400, 0 2px 10px rgba(255,196,0,0.55);
   }
 
   .cat-list{ margin: 0 16px; display:flex; flex-direction:column; gap:8px; }
@@ -587,6 +587,7 @@ const LEDGERS = [
 ];
 
 const PERSONAL_ALLOWANCE = 500000; // 지현/현제 개인 가계부는 수입 대신 고정 용돈으로 계산
+const OVERSPEND_WARNING_THRESHOLD = 400000; // 이 금액을 넘으면 과소비 주의 배너 표시
 
 const INCOME_CATEGORIES = [
   { id: "salary",   label: "급여",       icon: "💰", color: "#4B8060" },
@@ -1259,7 +1260,7 @@ function renderDashboard() {
     if (donutDenom > 0) {
       remainingShare = Math.max(0, baselineIncome - totalAmount) / donutDenom;
     }
-    if (!isShared && totalAmount > PERSONAL_ALLOWANCE) overspendWarning = true;
+    if (!isShared && totalAmount > OVERSPEND_WARNING_THRESHOLD) overspendWarning = true;
   }
   document.getElementById("dashWarning").style.display = overspendWarning ? "block" : "none";
 
