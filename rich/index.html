@@ -425,7 +425,7 @@
           <span class="summary-amt income mono" id="summaryIncome">0원</span>
         </span>
         <span class="summary-item" id="summaryInvestItem" style="display:none;">
-          <span class="summary-label investment">$</span>
+          <span class="summary-label investment">₩</span>
           <span class="summary-amt investment mono" id="summaryInvestment">0원</span>
         </span>
       </div>
@@ -880,7 +880,7 @@ function renderCalendar() {
     const dayParts = [];
     if (expenseTotal > 0) dayParts.push({ cls: "expense", text: `-${fmtNum(expenseTotal)}` });
     if (incomeTotal > 0) dayParts.push({ cls: "income", text: `+${fmtNum(incomeTotal)}` });
-    if (investmentTotal > 0) dayParts.push({ cls: "investment", text: `$${fmtNum(investmentTotal)}` });
+    if (investmentTotal > 0) dayParts.push({ cls: "investment", text: `₩${fmtNum(investmentTotal)}` });
 
     // 금액 자릿수가 늘어나면 한 줄에 다 들어오도록 폰트 크기를 줄인다.
     const totalLen = dayParts.reduce((sum, p) => sum + p.text.length, 0);
