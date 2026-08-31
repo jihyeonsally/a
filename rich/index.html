@@ -244,6 +244,10 @@
   #quickAddRow.chip-row{ gap:6px; }
   #quickAddRow .chip{ padding:6px 12px; font-size:12px; }
 
+  .assets-range-row{ padding: 0 16px 16px; }
+  #assetsRangeFilter.chip-row{ gap:6px; }
+  #assetsRangeFilter .chip{ padding:6px 12px; font-size:12px; }
+
   .dash-card{
     margin: 0 16px 16px;
     background: var(--card); border:1px solid var(--border); border-radius: var(--radius);
@@ -497,6 +501,14 @@
         <button data-type="income" class="income">수입</button>
       </div>
     </div>
+    <div class="assets-range-row">
+      <div class="chip-row" id="assetsRangeFilter">
+        <button class="chip" data-range="3">3개월</button>
+        <button class="chip" data-range="6">6개월</button>
+        <button class="chip active" data-range="12">12개월</button>
+        <button class="chip" data-range="all">전체</button>
+      </div>
+    </div>
     <div class="dash-card">
       <div class="trend-chart-wrap">
         <svg id="assetsChart" viewBox="0 0 320 160" preserveAspectRatio="none"></svg>
@@ -737,7 +749,8 @@ const state = {
   calUnsub: null,
   dashUnsub: null,
   assetsType: "all", // 자산관리 화면 상단 토글 ("all" | "expense" | "income")
-  assetsMonths: [],  // [{ monthKey, expense, income, investment }] 오름차순, 현재 가계부의 월별 합계
+  assetsRange: "12", // 자산관리 화면에 표시할 개월 수 ("3" | "6" | "12" | "all")
+  assetsMonths: [],  // [{ monthKey, expense, income, investment }] 오름차순, 현재 가계부의 월별 합계 (전체 기간)
 };
 
 /* ====================== Firestore 연동 (월별 문서 샤딩) ======================
@@ -1442,20 +1455,24 @@ function renderTrendChart(svg, series, type) {
     <text x="${xOf(n - 1).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="end">${lastLabel}</text>`;
 }
 
-// 전체=월별 순자산(수입-지출) 누적 추이, 지출/수입=월별 합계 추이
+// 전체=월별 순자산(수입-지출) 누적 추이, 지출/수입=월별 합계 추이.
+// 누적값은 항상 전체 기간을 기준으로 계산한 뒤, 선택된 범위(3/6/12개월/전체)만큼만 잘라서 보여준다.
 function renderAssets() {
   document.querySelectorAll("#assetsTypeToggle button").forEach(b => {
     b.classList.toggle("active", b.dataset.type === state.assetsType);
   });
+  document.querySelectorAll("#assetsRangeFilter .chip").forEach(c => {
+    c.classList.toggle("active", c.dataset.range === state.assetsRange);
+  });
 
-  const months = state.assetsMonths;
+  const allMonths = state.assetsMonths;
   const type = state.assetsType;
   const chartEl = document.getElementById("assetsChart");
   const emptyMsg = document.getElementById("assetsEmpty");
   const listEl = document.getElementById("assetsList");
   const totalLabel = document.getElementById("assetsTotalLabel");
 
-  if (months.length === 0) {
+  if (allMonths.length === 0) {
     emptyMsg.style.display = "block";
     chartEl.innerHTML = "";
     totalLabel.textContent = "0원";
@@ -1464,18 +1481,22 @@ function renderAssets() {
   }
   emptyMsg.style.display = "none";
 
-  let series;
+  let fullSeries;
   if (type === "all") {
     let running = 0;
-    series = months.map(m => {
+    fullSeries = allMonths.map(m => {
       running += (m.income - m.expense);
       return { monthKey: m.monthKey, value: running };
     });
   } else if (type === "expense") {
-    series = months.map(m => ({ monthKey: m.monthKey, value: m.expense }));
+    fullSeries = allMonths.map(m => ({ monthKey: m.monthKey, value: m.expense }));
   } else {
-    series = months.map(m => ({ monthKey: m.monthKey, value: m.income }));
+    fullSeries = allMonths.map(m => ({ monthKey: m.monthKey, value: m.income }));
   }
+
+  const rangeN = state.assetsRange === "all" ? fullSeries.length : Number(state.assetsRange);
+  const series = fullSeries.slice(-rangeN);
+  const months = allMonths.slice(-rangeN);
 
   const latest = series[series.length - 1].value;
   totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
@@ -1509,6 +1530,13 @@ document.getElementById("assetsTypeToggle").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-type]");
   if (!btn) return;
   state.assetsType = btn.dataset.type;
+  renderAssets();
+});
+
+document.getElementById("assetsRangeFilter").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  state.assetsRange = chip.dataset.range;
   renderAssets();
 });
 
