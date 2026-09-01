@@ -1219,8 +1219,7 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
 
   let angle = 0;
   let segParts = "";
-  let lineParts = "";
-  let callouts = "";
+  const calloutItems = []; // { mid, icon } — 각도 오름차순으로 쌓인다
 
   catsWithAmount.forEach((c, i) => {
     const share = totals[c.id] / denom;
@@ -1238,21 +1237,7 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
       segParts += `<text x="${pctPoint.x.toFixed(2)}" y="${pctPoint.y.toFixed(2)}" font-size="10" font-weight="600" fill="${textColor}" text-anchor="middle" dominant-baseline="central">${Math.round(share * 100)}%</text>`;
     }
 
-    if (share > threshold) {
-      const edge = polarPoint(CX, CY, R_OUT, mid);
-      const tip = polarPoint(CX, CY, LINE_R, mid);
-      const gap = 10; // 아이콘과 겹치지 않도록 살짝 못 미쳐서 멈춤
-      const lineEnd = polarPoint(CX, CY, LINE_R - gap, mid);
-
-      lineParts += `<line x1="${edge.x.toFixed(2)}" y1="${edge.y.toFixed(2)}" x2="${lineEnd.x.toFixed(2)}" y2="${lineEnd.y.toFixed(2)}" stroke="#000000" stroke-width="0.75" />`;
-
-      const left = (tip.x / 2).toFixed(1);
-      const top = (tip.y / 2).toFixed(1);
-      callouts += `
-        <div class="donut-callout" style="left:${left}%; top:${top}%; transform:translate(-50%,-50%);">
-          <span class="icon">${c.icon}</span>
-        </div>`;
-    }
+    if (share > threshold) calloutItems.push({ mid, icon: c.icon });
   });
 
   if (hasRemaining) {
@@ -1264,6 +1249,43 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
     }
     angle += sweep;
   }
+
+  // 각도가 가까운 아이콘끼리는 연결선 길이를 번갈아 늘려 바깥 여백으로
+  // 지그재그 배치해서 겹치지 않게 한다.
+  const MIN_GAP_DEG = 18;
+  const R_TIERS = [LINE_R, LINE_R + 14]; // 90, 104
+  calloutItems.forEach((item, i) => {
+    const gap = i === 0 ? Infinity : item.mid - calloutItems[i - 1].mid;
+    const prevLevel = i === 0 ? 0 : calloutItems[i - 1].level;
+    item.level = gap < MIN_GAP_DEG ? (prevLevel + 1) % 2 : 0;
+  });
+  if (calloutItems.length > 1) {
+    const first = calloutItems[0];
+    const last = calloutItems[calloutItems.length - 1];
+    const wrapGap = (360 - last.mid) + first.mid;
+    if (wrapGap < MIN_GAP_DEG && first.level === last.level) {
+      first.level = (last.level + 1) % 2;
+    }
+  }
+
+  let lineParts = "";
+  let callouts = "";
+  calloutItems.forEach(item => {
+    const r = R_TIERS[item.level];
+    const gap = 10; // 아이콘과 겹치지 않도록 살짝 못 미쳐서 멈춤
+    const edge = polarPoint(CX, CY, R_OUT, item.mid);
+    const tip = polarPoint(CX, CY, r, item.mid);
+    const lineEnd = polarPoint(CX, CY, r - gap, item.mid);
+
+    lineParts += `<line x1="${edge.x.toFixed(2)}" y1="${edge.y.toFixed(2)}" x2="${lineEnd.x.toFixed(2)}" y2="${lineEnd.y.toFixed(2)}" stroke="#000000" stroke-width="0.75" />`;
+
+    const left = (tip.x / 2).toFixed(1);
+    const top = (tip.y / 2).toFixed(1);
+    callouts += `
+      <div class="donut-callout" style="left:${left}%; top:${top}%; transform:translate(-50%,-50%);">
+        <span class="icon">${item.icon}</span>
+      </div>`;
+  });
 
   svg.innerHTML = segParts + lineParts;
   calloutsEl.innerHTML = callouts;
