@@ -1237,7 +1237,7 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
       segParts += `<text x="${pctPoint.x.toFixed(2)}" y="${pctPoint.y.toFixed(2)}" font-size="10" font-weight="600" fill="${textColor}" text-anchor="middle" dominant-baseline="central">${Math.round(share * 100)}%</text>`;
     }
 
-    if (share > threshold) calloutItems.push({ mid, icon: c.icon });
+    if (share > threshold) calloutItems.push({ trueMid: mid, mid, icon: c.icon });
   });
 
   if (hasRemaining) {
@@ -1250,31 +1250,55 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
     angle += sweep;
   }
 
-  // 각도가 가까운 아이콘끼리는 연결선 길이를 번갈아 늘려 바깥 여백으로
-  // 지그재그 배치해서 겹치지 않게 한다.
+  // 각도가 가까운 아이콘끼리는 (1) 라벨 각도를 옆으로 밀어 벌리고,
+  // (2) 그래도 남는 밀집은 연결선 길이를 번갈아 늘려 지그재그로 벌린다.
+  // 연결선은 실제 조각 위치(edge)에서 시작해 옆으로 밀린 라벨 위치(tip)까지
+  // 이어지므로, 밀집 구간에서는 선이 비스듬히 꺾여 보인다.
   const MIN_GAP_DEG = 18;
+  const MAX_SHIFT_DEG = 26; // 원래 각도에서 너무 멀리 밀리지 않도록 제한
   const R_TIERS = [LINE_R, LINE_R + 14]; // 90, 104
-  calloutItems.forEach((item, i) => {
-    const gap = i === 0 ? Infinity : item.mid - calloutItems[i - 1].mid;
-    const prevLevel = i === 0 ? 0 : calloutItems[i - 1].level;
-    item.level = gap < MIN_GAP_DEG ? (prevLevel + 1) % 2 : 0;
+
+  for (let pass = 0; pass < calloutItems.length; pass++) {
+    let moved = false;
+    for (let i = 1; i < calloutItems.length; i++) {
+      const gap = calloutItems[i].mid - calloutItems[i - 1].mid;
+      if (gap < MIN_GAP_DEG) {
+        const shift = (MIN_GAP_DEG - gap) / 2;
+        calloutItems[i - 1].mid -= shift;
+        calloutItems[i].mid += shift;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  calloutItems.forEach(item => {
+    const delta = Math.max(-MAX_SHIFT_DEG, Math.min(MAX_SHIFT_DEG, item.mid - item.trueMid));
+    item.mid = item.trueMid + delta;
   });
   if (calloutItems.length > 1) {
     const first = calloutItems[0];
     const last = calloutItems[calloutItems.length - 1];
     const wrapGap = (360 - last.mid) + first.mid;
-    if (wrapGap < MIN_GAP_DEG && first.level === last.level) {
-      first.level = (last.level + 1) % 2;
+    if (wrapGap < MIN_GAP_DEG) {
+      const shift = Math.min(MAX_SHIFT_DEG, (MIN_GAP_DEG - wrapGap) / 2);
+      first.mid = Math.min(first.trueMid + MAX_SHIFT_DEG, first.mid + shift);
+      last.mid = Math.max(last.trueMid - MAX_SHIFT_DEG, last.mid - shift);
     }
   }
+
+  calloutItems.forEach((item, i) => {
+    const gap = i === 0 ? Infinity : item.mid - calloutItems[i - 1].mid;
+    const prevLevel = i === 0 ? 0 : calloutItems[i - 1].level;
+    item.level = gap < MIN_GAP_DEG ? (prevLevel + 1) % 2 : 0;
+  });
 
   let lineParts = "";
   let callouts = "";
   calloutItems.forEach(item => {
     const r = R_TIERS[item.level];
     const gap = 10; // 아이콘과 겹치지 않도록 살짝 못 미쳐서 멈춤
-    const edge = polarPoint(CX, CY, R_OUT, item.mid);
-    const tip = polarPoint(CX, CY, r, item.mid);
+    const edge = polarPoint(CX, CY, R_OUT, item.trueMid); // 실제 조각 위치에서 선 시작
+    const tip = polarPoint(CX, CY, r, item.mid);           // 라벨은 옆으로 밀린 각도에 배치
     const lineEnd = polarPoint(CX, CY, r - gap, item.mid);
 
     lineParts += `<line x1="${edge.x.toFixed(2)}" y1="${edge.y.toFixed(2)}" x2="${lineEnd.x.toFixed(2)}" y2="${lineEnd.y.toFixed(2)}" stroke="#000000" stroke-width="0.75" />`;
