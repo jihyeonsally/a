@@ -244,9 +244,23 @@
   #quickAddRow.chip-row{ gap:6px; }
   #quickAddRow .chip{ padding:6px 12px; font-size:12px; }
 
+  .assets-daterange-row{
+    display:flex; align-items:center; gap:8px; padding: 0 16px 12px;
+  }
+  .assets-month-select{
+    flex:1; min-width:0; padding: 9px 10px; border-radius:12px; border:1px solid var(--border);
+    background: var(--card); font-family: inherit; font-size:13px; color: var(--text); outline:none;
+  }
+  .assets-daterange-sep{ color: var(--text-dim); font-weight:600; flex-shrink:0; }
+
   .assets-range-row{ padding: 0 16px 16px; }
-  #assetsRangeFilter.chip-row{ gap:6px; }
-  #assetsRangeFilter .chip{ padding:6px 12px; font-size:12px; }
+  #assetsMetricFilter.chip-row{ gap:6px; }
+  #assetsMetricFilter .chip{ padding:6px 12px; font-size:12px; }
+  #assetsMetricFilter .chip.active.all{ background: var(--accent); color:#fff; border-color: var(--accent); }
+  #assetsMetricFilter .chip.active.balance{ background: var(--accent); color:#fff; border-color: var(--accent); }
+  #assetsMetricFilter .chip.active.expense{ background: var(--expense); color:#fff; border-color: var(--expense); }
+  #assetsMetricFilter .chip.active.income{ background: var(--income); color:#fff; border-color: var(--income); }
+  #assetsMetricFilter .chip.active.investment{ background: var(--invest); color:#fff; border-color: var(--invest); }
 
   .dash-card{
     margin: 0 16px 16px;
@@ -257,6 +271,12 @@
   .chart-wrap{ width:100%; max-width:220px; margin:0 auto; }
   .trend-chart-wrap{ width:100%; }
   .trend-chart-wrap svg{ width:100%; height:auto; display:block; }
+  .chart-legend{
+    display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
+    margin-top:10px; font-size:11px; color: var(--text-dim);
+  }
+  .chart-legend .legend-item{ display:flex; align-items:center; gap:4px; }
+  .chart-legend i{ width:8px; height:8px; border-radius:2px; display:inline-block; }
   .donut-wrap{ position:relative; }
   .donut-wrap svg{ width:100%; height:auto; display:block; }
   .donut-callouts{ position:absolute; inset:0; pointer-events:none; }
@@ -495,23 +515,30 @@
   <div class="screen" id="screen-assets">
     <div class="dash-toggle">
       <span class="dash-total mono" id="assetsTotalLabel">0원</span>
-      <div class="dash-type-toggle" id="assetsTypeToggle">
-        <button data-type="all" class="active all">전체</button>
-        <button data-type="expense" class="expense">지출</button>
-        <button data-type="income" class="income">수입</button>
-      </div>
+    </div>
+    <div class="assets-daterange-row">
+      <select id="assetsStartSelect" class="assets-month-select"></select>
+      <span class="assets-daterange-sep">~</span>
+      <select id="assetsEndSelect" class="assets-month-select"></select>
     </div>
     <div class="assets-range-row">
-      <div class="chip-row" id="assetsRangeFilter">
-        <button class="chip" data-range="3">3개월</button>
-        <button class="chip" data-range="6">6개월</button>
-        <button class="chip active" data-range="12">12개월</button>
-        <button class="chip" data-range="all">전체</button>
+      <div class="chip-row" id="assetsMetricFilter">
+        <button data-metric="all" class="active all">전체</button>
+        <button data-metric="balance" class="balance">잔고</button>
+        <button data-metric="expense" class="expense">지출</button>
+        <button data-metric="income" class="income">수입</button>
+        <button data-metric="investment" class="investment">투자</button>
       </div>
     </div>
     <div class="dash-card">
       <div class="trend-chart-wrap">
-        <svg id="assetsChart" viewBox="0 0 320 160" preserveAspectRatio="none"></svg>
+        <svg id="assetsChart" viewBox="0 0 320 180" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="chart-legend" id="assetsLegend" style="display:none;">
+        <span class="legend-item"><i style="background:var(--accent)"></i>잔고</span>
+        <span class="legend-item"><i style="background:var(--expense)"></i>지출</span>
+        <span class="legend-item"><i style="background:var(--income)"></i>수입</span>
+        <span class="legend-item"><i style="background:var(--invest)"></i>투자</span>
       </div>
       <div class="dash-empty" id="assetsEmpty" style="display:none;">표시할 데이터가 없습니다.</div>
     </div>
@@ -748,8 +775,9 @@ const state = {
   editingEntry: null, // { original: entry, ledgerId } — set when the modal is editing an existing entry
   calUnsub: null,
   dashUnsub: null,
-  assetsType: "all", // 자산관리 화면 상단 토글 ("all" | "expense" | "income")
-  assetsRange: "12", // 자산관리 화면에 표시할 개월 수 ("3" | "6" | "12" | "all")
+  assetsMetric: "all", // 자산관리 화면 하단 토글 ("all" | "balance" | "expense" | "income" | "investment")
+  assetsStartMonth: null, // 표시 범위 시작 "YYYY-MM" (null이면 다음 로드 시 자동 선택)
+  assetsEndMonth: null,   // 표시 범위 종료 "YYYY-MM" (기본값: 오늘이 속한 연월)
   assetsMonths: [],  // [{ monthKey, expense, income, investment }] 오름차순, 현재 가계부의 월별 합계 (전체 기간)
 };
 
@@ -822,6 +850,8 @@ function switchLedger(id) {
   state.dashExpandedCats = new Set();
   state.calEntries = [];
   state.dashEntries = [];
+  state.assetsStartMonth = null; // 가계부가 바뀌면 다음 로드 시 그 가계부 기준으로 기본 범위 재계산
+  state.assetsEndMonth = null;
   if (id !== "shared" && (state.dashType === "investment" || state.dashType === "income")) {
     state.dashType = "expense";
     document.getElementById("dashExpenseBtn").classList.add("active");
@@ -1424,11 +1454,51 @@ function renderDashboard() {
 
 /* ====================== 자산관리 화면 ======================
    달력/대시보드와 달리 특정 월이 아니라 현재 가계부의 전체 월별 문서를
-   한 번에 불러와 월별 지출/수입 합계를 집계한다 (실시간 구독 아님).
+   한 번에 불러와 월별 지출/수입/투자 합계를 집계한다 (실시간 구독 아님).
 ============================================================ */
 function monthLabelOf(monthKey) {
   const [y, m] = monthKey.split("-").map(Number);
   return `${y}년 ${m}월`;
+}
+
+function addMonths(monthKey, delta) {
+  let [y, m] = monthKey.split("-").map(Number);
+  m += delta;
+  while (m > 12) { m -= 12; y++; }
+  while (m < 1) { m += 12; y--; }
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
+function buildMonthRange(startKey, endKey) {
+  const result = [];
+  let cur = startKey;
+  while (cur <= endKey) {
+    result.push(cur);
+    cur = addMonths(cur, 1);
+  }
+  return result;
+}
+
+// 시작/종료 연-월 셀렉트를 실제 데이터 범위(+오늘)로 채우고, 값이 없거나
+// 더 이상 유효하지 않으면 기본값(시작=가장 이른 달, 종료=오늘)으로 되돌린다.
+function populateAssetsMonthSelectors() {
+  const todayKey = monthKeyOf(new Date());
+  const dataKeys = state.assetsMonths.map(m => m.monthKey);
+  const allKeys = dataKeys.concat([todayKey]);
+  const minKey = allKeys.reduce((a, b) => (a < b ? a : b));
+  const maxKey = allKeys.reduce((a, b) => (a > b ? a : b));
+  const options = buildMonthRange(minKey, maxKey);
+
+  if (!state.assetsStartMonth || !options.includes(state.assetsStartMonth)) state.assetsStartMonth = minKey;
+  if (!state.assetsEndMonth || !options.includes(state.assetsEndMonth)) state.assetsEndMonth = todayKey;
+
+  const optionsHtml = options.map(k => `<option value="${k}">${monthLabelOf(k)}</option>`).join("");
+  const startSel = document.getElementById("assetsStartSelect");
+  const endSel = document.getElementById("assetsEndSelect");
+  startSel.innerHTML = optionsHtml;
+  endSel.innerHTML = optionsHtml;
+  startSel.value = state.assetsStartMonth;
+  endSel.value = state.assetsEndMonth;
 }
 
 async function loadAssetsData() {
@@ -1459,14 +1529,19 @@ async function loadAssetsData() {
     console.error("자산 데이터 로드 실패:", err);
     state.assetsMonths = [];
   }
+  populateAssetsMonthSelectors();
   renderAssets();
 }
 
-function renderTrendChart(svg, series, type) {
-  const W = 320, H = 160;
+// 단일 지표(잔고/지출/수입/투자)를 꺾은선 그래프로 그린다.
+function renderTrendChart(svg, series, metric) {
+  const W = 320, H = 180;
   const PAD_L = 8, PAD_R = 8, PAD_TOP = 14, PAD_BOTTOM = 22;
   const plotH = H - PAD_TOP - PAD_BOTTOM;
-  const color = type === "expense" ? "var(--expense)" : type === "income" ? "var(--income)" : "var(--accent)";
+  const color = metric === "expense" ? "var(--expense)"
+    : metric === "income" ? "var(--income)"
+    : metric === "investment" ? "var(--invest)"
+    : "var(--accent)"; // balance
   const n = series.length;
   const firstLabel = `${Number(series[0].monthKey.split("-")[1])}월`;
 
@@ -1501,65 +1576,140 @@ function renderTrendChart(svg, series, type) {
     <text x="${xOf(n - 1).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="end">${lastLabel}</text>`;
 }
 
-// 전체=월별 순자산(수입-지출) 누적 추이, 지출/수입=월별 합계 추이.
-// 누적값은 항상 전체 기간을 기준으로 계산한 뒤, 선택된 범위(3/6/12개월/전체)만큼만 잘라서 보여준다.
-function renderAssets() {
-  document.querySelectorAll("#assetsTypeToggle button").forEach(b => {
-    b.classList.toggle("active", b.dataset.type === state.assetsType);
-  });
-  document.querySelectorAll("#assetsRangeFilter .chip").forEach(c => {
-    c.classList.toggle("active", c.dataset.range === state.assetsRange);
+// "전체" 모드: 잔고는 막대로, 지출/수입/투자는 꺾은선으로 겹쳐 그린다.
+// 각 지표는 서로 스케일이 크게 달라 자기 자신의 최소/최대값 기준으로 각자 정규화한다.
+function renderComboChart(svg, months) {
+  const W = 320, H = 180;
+  const PAD_L = 8, PAD_R = 8, PAD_TOP = 14, PAD_BOTTOM = 22;
+  const plotH = H - PAD_TOP - PAD_BOTTOM;
+  const n = months.length;
+
+  const scaleFor = (key) => {
+    const vals = months.map(m => m[key]);
+    const minV = Math.min(0, ...vals);
+    const maxV = Math.max(0, ...vals);
+    const range = (maxV - minV) || 1;
+    return (v) => PAD_TOP + plotH - ((v - minV) / range) * plotH;
+  };
+  const balanceY = scaleFor("balance");
+  const expenseY = scaleFor("expense");
+  const incomeY = scaleFor("income");
+  const investmentY = scaleFor("investment");
+
+  const firstLabel = `${Number(months[0].monthKey.split("-")[1])}월`;
+  const lastLabel = `${Number(months[n - 1].monthKey.split("-")[1])}월`;
+
+  if (n === 1) {
+    const cx = W / 2;
+    const barW = 24;
+    const zeroY = balanceY(0);
+    const valY = balanceY(months[0].balance);
+    const top = Math.min(zeroY, valY);
+    const h = Math.max(2, Math.abs(zeroY - valY));
+    svg.innerHTML = `
+      <rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW}" height="${h.toFixed(1)}" rx="3" fill="var(--accent)" opacity="0.55" />
+      <circle cx="${cx.toFixed(1)}" cy="${expenseY(months[0].expense).toFixed(1)}" r="2.5" fill="var(--expense)" />
+      <circle cx="${cx.toFixed(1)}" cy="${incomeY(months[0].income).toFixed(1)}" r="2.5" fill="var(--income)" />
+      <circle cx="${cx.toFixed(1)}" cy="${investmentY(months[0].investment).toFixed(1)}" r="2.5" fill="var(--invest)" />
+      <text x="${cx.toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="middle">${firstLabel}</text>`;
+    return;
+  }
+
+  const stepX = (W - PAD_L - PAD_R) / n;
+  const xOfCenter = (i) => PAD_L + stepX * (i + 0.5);
+  const barW = Math.min(20, stepX * 0.5);
+  const zeroYBal = balanceY(0);
+
+  let bars = "";
+  months.forEach((m, i) => {
+    const cx = xOfCenter(i);
+    const y = balanceY(m.balance);
+    const top = Math.min(zeroYBal, y);
+    const h = Math.max(1.5, Math.abs(zeroYBal - y));
+    bars += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--accent)" opacity="0.5" />`;
   });
 
-  const allMonths = state.assetsMonths;
-  const type = state.assetsType;
+  const lineFor = (key, yOf, color) => {
+    const pts = months.map((m, i) => `${xOfCenter(i).toFixed(1)},${yOf(m[key]).toFixed(1)}`).join(" ");
+    const dots = months.map((m, i) => `<circle cx="${xOfCenter(i).toFixed(1)}" cy="${yOf(m[key]).toFixed(1)}" r="2" fill="${color}" />`).join("");
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round" />${dots}`;
+  };
+
+  svg.innerHTML = `
+    <line x1="${PAD_L}" y1="${zeroYBal.toFixed(1)}" x2="${W - PAD_R}" y2="${zeroYBal.toFixed(1)}" stroke="var(--border)" stroke-width="1" />
+    ${bars}
+    ${lineFor("expense", expenseY, "var(--expense)")}
+    ${lineFor("income", incomeY, "var(--income)")}
+    ${lineFor("investment", investmentY, "var(--invest)")}
+    <text x="${xOfCenter(0).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="start">${firstLabel}</text>
+    <text x="${xOfCenter(n - 1).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="end">${lastLabel}</text>`;
+}
+
+function renderAssets() {
+  document.querySelectorAll("#assetsMetricFilter .chip").forEach(c => {
+    c.classList.toggle("active", c.dataset.metric === state.assetsMetric);
+  });
+
+  const metric = state.assetsMetric;
   const chartEl = document.getElementById("assetsChart");
   const emptyMsg = document.getElementById("assetsEmpty");
   const listEl = document.getElementById("assetsList");
   const totalLabel = document.getElementById("assetsTotalLabel");
+  const legendEl = document.getElementById("assetsLegend");
 
-  if (allMonths.length === 0) {
+  if (state.assetsMonths.length === 0 || !state.assetsStartMonth || !state.assetsEndMonth) {
     emptyMsg.style.display = "block";
     chartEl.innerHTML = "";
+    legendEl.style.display = "none";
     totalLabel.textContent = "0원";
     listEl.innerHTML = "";
     return;
   }
   emptyMsg.style.display = "none";
 
-  let fullSeries;
-  if (type === "all") {
-    let running = 0;
-    fullSeries = allMonths.map(m => {
-      running += (m.income - m.expense);
-      return { monthKey: m.monthKey, value: running };
-    });
-  } else if (type === "expense") {
-    fullSeries = allMonths.map(m => ({ monthKey: m.monthKey, value: m.expense }));
+  const byKey = {};
+  state.assetsMonths.forEach(m => { byKey[m.monthKey] = m; });
+
+  // 누적 잔고는 선택 범위와 무관하게 항상 실제 최초 월부터 계산해야
+  // 시작월을 뒤로 옮겨도 그 시점까지의 누적값이 끊기지 않는다.
+  const earliestKey = state.assetsMonths[0].monthKey;
+  const historyStart = earliestKey < state.assetsEndMonth ? earliestKey : state.assetsEndMonth;
+  const fullRange = buildMonthRange(historyStart, state.assetsEndMonth).map(key => {
+    const d = byKey[key] || { expense: 0, income: 0, investment: 0 };
+    return { monthKey: key, expense: d.expense, income: d.income, investment: d.investment };
+  });
+  let running = 0;
+  fullRange.forEach(m => { running += (m.income - m.expense); m.balance = running; });
+
+  const byKeyFull = {};
+  fullRange.forEach(m => { byKeyFull[m.monthKey] = m; });
+  const months = buildMonthRange(state.assetsStartMonth, state.assetsEndMonth).map(key => byKeyFull[key]);
+
+  if (metric === "all") {
+    legendEl.style.display = "flex";
+    const latest = months[months.length - 1].balance;
+    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
+    renderComboChart(chartEl, months);
   } else {
-    fullSeries = allMonths.map(m => ({ monthKey: m.monthKey, value: m.income }));
+    legendEl.style.display = "none";
+    const series = months.map(m => ({ monthKey: m.monthKey, value: m[metric] }));
+    const latest = series[series.length - 1].value;
+    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
+    renderTrendChart(chartEl, series, metric);
   }
-
-  const rangeN = state.assetsRange === "all" ? fullSeries.length : Number(state.assetsRange);
-  const series = fullSeries.slice(-rangeN);
-  const months = allMonths.slice(-rangeN);
-
-  const latest = series[series.length - 1].value;
-  totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
-
-  renderTrendChart(chartEl, series, type);
 
   listEl.innerHTML = months.slice().reverse().map(m => {
     let sign, amt, cls;
-    if (type === "all") {
-      const net = m.income - m.expense;
-      sign = net < 0 ? "-" : "+";
-      amt = Math.abs(net);
-      cls = net < 0 ? "expense" : "income";
-    } else if (type === "expense") {
+    if (metric === "all" || metric === "balance") {
+      sign = m.balance < 0 ? "-" : "+";
+      amt = Math.abs(m.balance);
+      cls = m.balance < 0 ? "expense" : "income";
+    } else if (metric === "expense") {
       sign = "-"; amt = m.expense; cls = "expense";
-    } else {
+    } else if (metric === "income") {
       sign = "+"; amt = m.income; cls = "income";
+    } else {
+      sign = "+"; amt = m.investment; cls = "investment";
     }
     return `
       <div class="cat-row-wrap">
@@ -1572,17 +1722,28 @@ function renderAssets() {
   }).join("");
 }
 
-document.getElementById("assetsTypeToggle").addEventListener("click", (e) => {
-  const btn = e.target.closest("button[data-type]");
-  if (!btn) return;
-  state.assetsType = btn.dataset.type;
+document.getElementById("assetsMetricFilter").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  state.assetsMetric = chip.dataset.metric;
   renderAssets();
 });
 
-document.getElementById("assetsRangeFilter").addEventListener("click", (e) => {
-  const chip = e.target.closest(".chip");
-  if (!chip) return;
-  state.assetsRange = chip.dataset.range;
+document.getElementById("assetsStartSelect").addEventListener("change", (e) => {
+  state.assetsStartMonth = e.target.value;
+  if (state.assetsStartMonth > state.assetsEndMonth) {
+    state.assetsEndMonth = state.assetsStartMonth;
+    document.getElementById("assetsEndSelect").value = state.assetsEndMonth;
+  }
+  renderAssets();
+});
+
+document.getElementById("assetsEndSelect").addEventListener("change", (e) => {
+  state.assetsEndMonth = e.target.value;
+  if (state.assetsEndMonth < state.assetsStartMonth) {
+    state.assetsStartMonth = state.assetsEndMonth;
+    document.getElementById("assetsStartSelect").value = state.assetsStartMonth;
+  }
   renderAssets();
 });
 
