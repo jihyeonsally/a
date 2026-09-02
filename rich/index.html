@@ -514,7 +514,7 @@
   <!-- Screen 3: Asset trend -->
   <div class="screen" id="screen-assets">
     <div class="dash-toggle">
-      <span class="dash-total mono" id="assetsTotalLabel">0</span>
+      <span class="dash-total mono" id="assetsTotalLabel">0원</span>
     </div>
     <div class="assets-daterange-row">
       <select id="assetsStartSelect" class="assets-month-select"></select>
@@ -1679,7 +1679,7 @@ function renderAssets() {
     emptyMsg.style.display = "block";
     chartEl.innerHTML = "";
     legendEl.style.display = "none";
-    totalLabel.textContent = "0";
+    totalLabel.textContent = "0원";
     listEl.innerHTML = "";
     return;
   }
@@ -1706,13 +1706,13 @@ function renderAssets() {
   if (metric === "all") {
     legendEl.style.display = "flex";
     const latest = months[months.length - 1].balance;
-    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}`;
+    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
     renderComboChart(chartEl, months);
   } else {
     legendEl.style.display = "none";
     const series = months.map(m => ({ monthKey: m.monthKey, value: m[metric] }));
     const latest = series[series.length - 1].value;
-    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}`;
+    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
     renderTrendChart(chartEl, series, metric);
   }
 
@@ -1733,17 +1733,17 @@ function renderAssets() {
     const balSign = m.balance < 0 ? "-" : "+";
     const breakdownHtml = expanded ? `
       <div class="cat-entries">
-        <div class="cat-entry-row"><span class="entry-memo">잔고</span><span class="amt ${m.balance < 0 ? "expense" : "income"}">${balSign}${fmtNum(Math.abs(m.balance))}</span></div>
-        <div class="cat-entry-row"><span class="entry-memo">지출</span><span class="amt expense">-${fmtNum(m.expense)}</span></div>
-        <div class="cat-entry-row"><span class="entry-memo">수입</span><span class="amt income">+${fmtNum(m.income)}</span></div>
-        <div class="cat-entry-row"><span class="entry-memo">투자</span><span class="amt investment">+${fmtNum(m.investment)}</span></div>
+        <div class="cat-entry-row"><span class="entry-memo">잔고</span><span class="amt ${m.balance < 0 ? "expense" : "income"}">${balSign}${fmtNum(Math.abs(m.balance))}원</span></div>
+        <div class="cat-entry-row"><span class="entry-memo">지출</span><span class="amt expense">-${fmtNum(m.expense)}원</span></div>
+        <div class="cat-entry-row"><span class="entry-memo">수입</span><span class="amt income">+${fmtNum(m.income)}원</span></div>
+        <div class="cat-entry-row"><span class="entry-memo">투자</span><span class="amt investment">+${fmtNum(m.investment)}원</span></div>
       </div>` : "";
     return `
       <div class="cat-row-wrap">
         <button class="cat-row" data-month="${m.monthKey}">
           <span class="icon">🗓️</span>
           <span class="name">${monthLabelOf(m.monthKey)}</span>
-          <span class="amt ${cls}">${sign}${fmtNum(amt)}</span>
+          <span class="amt ${cls}">${sign}${fmtNum(amt)}원</span>
           <span class="chevron">${expanded ? "▲" : "▼"}</span>
         </button>
         ${breakdownHtml}
