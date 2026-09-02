@@ -779,6 +779,7 @@ const state = {
   assetsStartMonth: null, // 표시 범위 시작 "YYYY-MM" (null이면 다음 로드 시 자동 선택)
   assetsEndMonth: null,   // 표시 범위 종료 "YYYY-MM" (기본값: 오늘이 속한 연월)
   assetsMonths: [],  // [{ monthKey, expense, income, investment }] 오름차순, 현재 가계부의 월별 합계 (전체 기간)
+  assetsExpandedMonths: new Set(), // 자산관리 하단 목록에서 펼쳐진 월(monthKey) 목록
 };
 
 /* ====================== Firestore 연동 (월별 문서 샤딩) ======================
@@ -852,6 +853,7 @@ function switchLedger(id) {
   state.dashEntries = [];
   state.assetsStartMonth = null; // 가계부가 바뀌면 다음 로드 시 그 가계부 기준으로 기본 범위 재계산
   state.assetsEndMonth = null;
+  state.assetsExpandedMonths = new Set();
   if (id !== "shared" && (state.dashType === "investment" || state.dashType === "income")) {
     state.dashType = "expense";
     document.getElementById("dashExpenseBtn").classList.add("active");
@@ -1711,15 +1713,35 @@ function renderAssets() {
     } else {
       sign = "+"; amt = m.investment; cls = "investment";
     }
+    const expanded = state.assetsExpandedMonths.has(m.monthKey);
+    const balSign = m.balance < 0 ? "-" : "+";
+    const breakdownHtml = expanded ? `
+      <div class="cat-entries">
+        <div class="cat-entry-row"><span class="entry-memo">잔고</span><span class="amt ${m.balance < 0 ? "expense" : "income"}">${balSign}${fmtNum(Math.abs(m.balance))}</span></div>
+        <div class="cat-entry-row"><span class="entry-memo">지출</span><span class="amt expense">-${fmtNum(m.expense)}</span></div>
+        <div class="cat-entry-row"><span class="entry-memo">수입</span><span class="amt income">+${fmtNum(m.income)}</span></div>
+        <div class="cat-entry-row"><span class="entry-memo">투자</span><span class="amt investment">+${fmtNum(m.investment)}</span></div>
+      </div>` : "";
     return `
       <div class="cat-row-wrap">
-        <div class="cat-row" style="cursor:default;">
+        <button class="cat-row" data-month="${m.monthKey}">
           <span class="icon">🗓️</span>
           <span class="name">${monthLabelOf(m.monthKey)}</span>
           <span class="amt ${cls}">${sign}${fmtNum(amt)}</span>
-        </div>
+          <span class="chevron">${expanded ? "▲" : "▼"}</span>
+        </button>
+        ${breakdownHtml}
       </div>`;
   }).join("");
+
+  listEl.querySelectorAll(".cat-row[data-month]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.month;
+      if (state.assetsExpandedMonths.has(key)) state.assetsExpandedMonths.delete(key);
+      else state.assetsExpandedMonths.add(key);
+      renderAssets();
+    });
+  });
 }
 
 document.getElementById("assetsMetricFilter").addEventListener("click", (e) => {
