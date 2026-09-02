@@ -514,7 +514,7 @@
   <!-- Screen 3: Asset trend -->
   <div class="screen" id="screen-assets">
     <div class="dash-toggle">
-      <span class="dash-total mono" id="assetsTotalLabel">0원</span>
+      <span class="dash-total mono" id="assetsTotalLabel">0</span>
     </div>
     <div class="assets-daterange-row">
       <select id="assetsStartSelect" class="assets-month-select"></select>
@@ -523,11 +523,11 @@
     </div>
     <div class="assets-range-row">
       <div class="chip-row" id="assetsMetricFilter">
-        <button data-metric="all" class="active all">전체</button>
-        <button data-metric="balance" class="balance">잔고</button>
-        <button data-metric="expense" class="expense">지출</button>
-        <button data-metric="income" class="income">수입</button>
-        <button data-metric="investment" class="investment">투자</button>
+        <button class="chip active all" data-metric="all">전체</button>
+        <button class="chip balance" data-metric="balance">잔고</button>
+        <button class="chip expense" data-metric="expense">지출</button>
+        <button class="chip income" data-metric="income">수입</button>
+        <button class="chip investment" data-metric="investment">투자</button>
       </div>
     </div>
     <div class="dash-card">
@@ -1661,7 +1661,7 @@ function renderAssets() {
     emptyMsg.style.display = "block";
     chartEl.innerHTML = "";
     legendEl.style.display = "none";
-    totalLabel.textContent = "0원";
+    totalLabel.textContent = "0";
     listEl.innerHTML = "";
     return;
   }
@@ -1688,13 +1688,13 @@ function renderAssets() {
   if (metric === "all") {
     legendEl.style.display = "flex";
     const latest = months[months.length - 1].balance;
-    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
+    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}`;
     renderComboChart(chartEl, months);
   } else {
     legendEl.style.display = "none";
     const series = months.map(m => ({ monthKey: m.monthKey, value: m[metric] }));
     const latest = series[series.length - 1].value;
-    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
+    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}`;
     renderTrendChart(chartEl, series, metric);
   }
 
@@ -1716,7 +1716,7 @@ function renderAssets() {
         <div class="cat-row" style="cursor:default;">
           <span class="icon">🗓️</span>
           <span class="name">${monthLabelOf(m.monthKey)}</span>
-          <span class="amt ${cls}">${sign}${fmtNum(amt)}원</span>
+          <span class="amt ${cls}">${sign}${fmtNum(amt)}</span>
         </div>
       </div>`;
   }).join("");
