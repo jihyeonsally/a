@@ -254,13 +254,35 @@
   .assets-daterange-sep{ color: var(--text-dim); font-weight:600; flex-shrink:0; }
 
   .assets-range-row{ padding: 0 16px 16px; }
-  #assetsMetricFilter.chip-row{ gap:6px; }
-  #assetsMetricFilter .chip{ padding:6px 12px; font-size:12px; }
-  #assetsMetricFilter .chip.active.all{ background: var(--accent); color:#fff; border-color: var(--accent); }
-  #assetsMetricFilter .chip.active.balance{ background: var(--accent); color:#fff; border-color: var(--accent); }
-  #assetsMetricFilter .chip.active.expense{ background: var(--expense); color:#fff; border-color: var(--expense); }
-  #assetsMetricFilter .chip.active.income{ background: var(--income); color:#fff; border-color: var(--income); }
-  #assetsMetricFilter .chip.active.investment{ background: var(--invest); color:#fff; border-color: var(--invest); }
+  #chartMetricFilter.chip-row{ gap:6px; }
+  #chartMetricFilter .chip{ padding:6px 12px; font-size:12px; }
+  #chartMetricFilter .chip.active.all{ background: var(--accent); color:#fff; border-color: var(--accent); }
+  #chartMetricFilter .chip.active.balance{ background: var(--accent); color:#fff; border-color: var(--accent); }
+  #chartMetricFilter .chip.active.expense{ background: var(--expense); color:#fff; border-color: var(--expense); }
+  #chartMetricFilter .chip.active.income{ background: var(--income); color:#fff; border-color: var(--income); }
+  #chartMetricFilter .chip.active.investment{ background: var(--invest); color:#fff; border-color: var(--invest); }
+
+  .assets-table-card{ display:block; padding:0; overflow:hidden; }
+  .assets-table-scroll{ width:100%; overflow-x:auto; }
+  .assets-table{ width:100%; border-collapse:collapse; font-size:13px; white-space:nowrap; }
+  .assets-table th{
+    text-align:right; font-size:11px; font-weight:700; color: var(--text-dim);
+    padding: 10px 10px; border-bottom:1px solid var(--border); background: var(--bg);
+    position:sticky; top:0;
+  }
+  .assets-table th:first-child, .assets-table td:first-child{ text-align:left; }
+  .assets-table td{ padding: 8px 10px; border-bottom:1px solid var(--border); text-align:right; }
+  .assets-table td.col-month{ font-weight:600; color: var(--text); }
+  .assets-table td.col-readonly.expense{ color: var(--expense); }
+  .assets-table td.col-readonly.income{ color: var(--income); }
+  .assets-table td.col-readonly.investment{ color: var(--invest); }
+  .asset-input{
+    width:90px; padding: 6px 8px; border-radius:8px; border:1px solid var(--border);
+    background: var(--accent-soft); font-family: inherit; font-size:13px; color: var(--text);
+    text-align:right; outline:none;
+  }
+  .asset-input:focus{ border-color: var(--accent); }
+  .asset-input::placeholder{ color: var(--text-dim); }
 
   .dash-card{
     margin: 0 16px 16px;
@@ -511,18 +533,40 @@
     <div class="cat-list" id="catList"></div>
   </div>
 
-  <!-- Screen 3: Asset trend -->
+  <!-- Screen 3: Asset entry (엑셀처럼 매월 자산을 수기 입력) -->
   <div class="screen" id="screen-assets">
     <div class="dash-toggle">
-      <span class="dash-total mono" id="assetsTotalLabel">0원</span>
+      <span class="dash-total mono">자산 입력</span>
     </div>
     <div class="assets-daterange-row">
-      <select id="assetsStartSelect" class="assets-month-select"></select>
+      <select id="assetsTableStartSelect" class="assets-month-select"></select>
       <span class="assets-daterange-sep">~</span>
-      <select id="assetsEndSelect" class="assets-month-select"></select>
+      <select id="assetsTableEndSelect" class="assets-month-select"></select>
+    </div>
+    <div class="dash-card assets-table-card">
+      <div class="assets-table-scroll">
+        <table class="assets-table">
+          <thead>
+            <tr><th>연-월</th><th>자산</th><th>지출</th><th>수입</th><th>투자</th></tr>
+          </thead>
+          <tbody id="assetsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screen 4: Chart -->
+  <div class="screen" id="screen-chart">
+    <div class="dash-toggle">
+      <span class="dash-total mono" id="chartTotalLabel">0원</span>
+    </div>
+    <div class="assets-daterange-row">
+      <select id="chartStartSelect" class="assets-month-select"></select>
+      <span class="assets-daterange-sep">~</span>
+      <select id="chartEndSelect" class="assets-month-select"></select>
     </div>
     <div class="assets-range-row">
-      <div class="chip-row" id="assetsMetricFilter">
+      <div class="chip-row" id="chartMetricFilter">
         <button class="chip active all" data-metric="all">전체</button>
         <button class="chip balance" data-metric="balance">잔고</button>
         <button class="chip expense" data-metric="expense">지출</button>
@@ -532,17 +576,17 @@
     </div>
     <div class="dash-card">
       <div class="trend-chart-wrap">
-        <svg id="assetsChart" viewBox="0 0 320 180" preserveAspectRatio="none"></svg>
+        <svg id="chartSvg" viewBox="0 0 320 180" preserveAspectRatio="none"></svg>
       </div>
-      <div class="chart-legend" id="assetsLegend" style="display:none;">
+      <div class="chart-legend" id="chartLegend" style="display:none;">
         <span class="legend-item"><i style="background:var(--accent)"></i>잔고</span>
         <span class="legend-item"><i style="background:var(--expense)"></i>지출</span>
         <span class="legend-item"><i style="background:var(--income)"></i>수입</span>
         <span class="legend-item"><i style="background:var(--invest)"></i>투자</span>
       </div>
-      <div class="dash-empty" id="assetsEmpty" style="display:none;">표시할 데이터가 없습니다.</div>
+      <div class="dash-empty" id="chartEmpty" style="display:none;">표시할 데이터가 없습니다.</div>
     </div>
-    <div class="cat-list" id="assetsList"></div>
+    <div class="cat-list" id="chartList"></div>
   </div>
 
   <div class="tabbar">
@@ -557,6 +601,9 @@
     </button>
     <button class="tabbtn" data-screen="assets">
       <span class="icon">🏦</span>
+    </button>
+    <button class="tabbtn" data-screen="chart">
+      <span class="icon">📈</span>
     </button>
   </div>
 
@@ -775,11 +822,13 @@ const state = {
   editingEntry: null, // { original: entry, ledgerId } — set when the modal is editing an existing entry
   calUnsub: null,
   dashUnsub: null,
-  assetsMetric: "all", // 자산관리 화면 하단 토글 ("all" | "balance" | "expense" | "income" | "investment")
-  assetsStartMonth: null, // 표시 범위 시작 "YYYY-MM" (null이면 다음 로드 시 자동 선택)
-  assetsEndMonth: null,   // 표시 범위 종료 "YYYY-MM" (기본값: 오늘이 속한 연월)
-  assetsMonths: [],  // [{ monthKey, expense, income, investment }] 오름차순, 현재 가계부의 월별 합계 (전체 기간)
-  assetsExpandedMonths: new Set(), // 자산관리 하단 목록에서 펼쳐진 월(monthKey) 목록
+  assetsMonths: [],  // [{ monthKey, expense, income, investment, asset }] 오름차순, 현재 가계부의 월별 데이터 (전체 기간)
+  tableStartMonth: null, // 자산 입력 화면 표시 범위 시작 "YYYY-MM" (null이면 다음 로드 시 자동 선택)
+  tableEndMonth: null,   // 자산 입력 화면 표시 범위 종료 "YYYY-MM" (기본값: 오늘이 속한 연월)
+  chartMetric: "all", // 차트 화면 하단 토글 ("all" | "balance" | "expense" | "income" | "investment")
+  chartStartMonth: null, // 차트 화면 표시 범위 시작 "YYYY-MM"
+  chartEndMonth: null,   // 차트 화면 표시 범위 종료 "YYYY-MM" (기본값: 오늘이 속한 연월)
+  chartExpandedMonths: new Set(), // 차트 화면 하단 목록에서 펼쳐진 월(monthKey) 목록
 };
 
 /* ====================== Firestore 연동 (월별 문서 샤딩) ======================
@@ -843,6 +892,12 @@ async function deleteEntry(entry, ledgerId) {
   });
 }
 
+// 자산 입력 화면에서 수기로 입력한 월별 자산 값을 저장한다 (entries 배열과는 별개 필드).
+async function saveManualAsset(ledgerId, monthKey, value) {
+  const docId = monthDocId(ledgerId, monthKey);
+  await db.collection(COLLECTION).doc(docId).set({ asset: value }, { merge: true });
+}
+
 /* ====================== 가계부 전환 ====================== */
 function switchLedger(id) {
   state.currentLedger = id;
@@ -851,9 +906,12 @@ function switchLedger(id) {
   state.dashExpandedCats = new Set();
   state.calEntries = [];
   state.dashEntries = [];
-  state.assetsStartMonth = null; // 가계부가 바뀌면 다음 로드 시 그 가계부 기준으로 기본 범위 재계산
-  state.assetsEndMonth = null;
-  state.assetsExpandedMonths = new Set();
+  // 가계부가 바뀌면 다음 로드 시 그 가계부 기준으로 기본 범위를 재계산한다.
+  state.tableStartMonth = null;
+  state.tableEndMonth = null;
+  state.chartStartMonth = null;
+  state.chartEndMonth = null;
+  state.chartExpandedMonths = new Set();
   if (id !== "shared" && (state.dashType === "investment" || state.dashType === "income")) {
     state.dashType = "expense";
     document.getElementById("dashExpenseBtn").classList.add("active");
@@ -869,7 +927,8 @@ function switchLedger(id) {
   renderDashboard();
   listenCalendarMonth(id, state.calDate);
   listenDashboardMonth(id, state.dashDate);
-  if (document.getElementById("screen-assets").classList.contains("active")) loadAssetsData();
+  const activeScreenId = document.querySelector(".screen.active").id;
+  if (activeScreenId === "screen-assets" || activeScreenId === "screen-chart") loadAssetMonthlyData();
 }
 
 function renderLedgerToggle() {
@@ -897,7 +956,7 @@ document.querySelectorAll(".tabbtn[data-screen]").forEach(btn => {
     btn.classList.add("active");
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById("screen-" + btn.dataset.screen).classList.add("active");
-    if (btn.dataset.screen === "assets") loadAssetsData();
+    if (btn.dataset.screen === "assets" || btn.dataset.screen === "chart") loadAssetMonthlyData();
   });
 });
 
@@ -1454,9 +1513,11 @@ function renderDashboard() {
   });
 }
 
-/* ====================== 자산관리 화면 ======================
+/* ====================== 자산 입력 / 차트 화면 ======================
    달력/대시보드와 달리 특정 월이 아니라 현재 가계부의 전체 월별 문서를
-   한 번에 불러와 월별 지출/수입/투자 합계를 집계한다 (실시간 구독 아님).
+   한 번에 불러온다 (실시간 구독 아님). 지출/수입/투자는 그 달의 가계부
+   내역에서 자동 집계하고, "자산"(잔고)은 사용자가 엑셀처럼 직접 입력한
+   값을 그대로 사용한다 (entries와 별개인 asset 필드).
 ============================================================ */
 function monthLabelOf(monthKey) {
   const [y, m] = monthKey.split("-").map(Number);
@@ -1483,7 +1544,7 @@ function buildMonthRange(startKey, endKey) {
 
 // 시작/종료 연-월 셀렉트를 실제 데이터 범위(+오늘)로 채우고, 값이 없거나
 // 더 이상 유효하지 않으면 기본값(시작=가장 이른 달, 종료=오늘)으로 되돌린다.
-function populateAssetsMonthSelectors() {
+function populateMonthSelectors(startElId, endElId, startStateKey, endStateKey) {
   const todayKey = monthKeyOf(new Date());
   const dataKeys = state.assetsMonths.map(m => m.monthKey);
   const allKeys = dataKeys.concat([todayKey]);
@@ -1491,22 +1552,19 @@ function populateAssetsMonthSelectors() {
   const maxKey = allKeys.reduce((a, b) => (a > b ? a : b));
   const options = buildMonthRange(minKey, maxKey);
 
-  if (!state.assetsStartMonth || !options.includes(state.assetsStartMonth)) state.assetsStartMonth = minKey;
-  if (!state.assetsEndMonth || !options.includes(state.assetsEndMonth)) state.assetsEndMonth = todayKey;
+  if (!state[startStateKey] || !options.includes(state[startStateKey])) state[startStateKey] = minKey;
+  if (!state[endStateKey] || !options.includes(state[endStateKey])) state[endStateKey] = todayKey;
 
   const optionsHtml = options.map(k => `<option value="${k}">${monthLabelOf(k)}</option>`).join("");
-  const startSel = document.getElementById("assetsStartSelect");
-  const endSel = document.getElementById("assetsEndSelect");
+  const startSel = document.getElementById(startElId);
+  const endSel = document.getElementById(endElId);
   startSel.innerHTML = optionsHtml;
   endSel.innerHTML = optionsHtml;
-  startSel.value = state.assetsStartMonth;
-  endSel.value = state.assetsEndMonth;
+  startSel.value = state[startStateKey];
+  endSel.value = state[endStateKey];
 }
 
-async function loadAssetsData() {
-  const listEl = document.getElementById("assetsList");
-  listEl.innerHTML = `<div class="day-detail-empty">불러오는 중...</div>`;
-
+async function loadAssetMonthlyData() {
   const prefix = `${state.currentLedger}_`;
   try {
     const snap = await db.collection(COLLECTION)
@@ -1517,25 +1575,98 @@ async function loadAssetsData() {
     const byMonth = {};
     snap.forEach(doc => {
       const monthKey = doc.id.slice(prefix.length);
-      const entries = (doc.data() && doc.data().entries) || [];
+      const data = doc.data() || {};
+      const entries = data.entries || [];
       let expense = 0, income = 0, investment = 0;
       entries.forEach(e => {
         if (e.type === "income") income += Number(e.amount);
         else if (e.type === "investment") investment += Number(e.amount);
         else expense += Number(e.amount);
       });
-      byMonth[monthKey] = { monthKey, expense, income, investment };
+      const asset = (data.asset === undefined || data.asset === null) ? null : Number(data.asset);
+      byMonth[monthKey] = { monthKey, expense, income, investment, asset };
     });
     state.assetsMonths = Object.values(byMonth).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
   } catch (err) {
     console.error("자산 데이터 로드 실패:", err);
     state.assetsMonths = [];
   }
-  populateAssetsMonthSelectors();
-  renderAssets();
+  populateMonthSelectors("assetsTableStartSelect", "assetsTableEndSelect", "tableStartMonth", "tableEndMonth");
+  populateMonthSelectors("chartStartSelect", "chartEndSelect", "chartStartMonth", "chartEndMonth");
+  renderAssetsTable();
+  renderChart();
 }
 
-// 단일 지표(잔고/지출/수입/투자)를 꺾은선 그래프로 그린다.
+/* ---------- 자산 입력 화면 (엑셀 스타일 표) ---------- */
+function renderAssetsTable() {
+  const tbody = document.getElementById("assetsTableBody");
+  if (!state.tableStartMonth || !state.tableEndMonth) { tbody.innerHTML = ""; return; }
+
+  const byKey = {};
+  state.assetsMonths.forEach(m => { byKey[m.monthKey] = m; });
+
+  const keys = buildMonthRange(state.tableStartMonth, state.tableEndMonth).slice().reverse();
+  tbody.innerHTML = keys.map(key => {
+    const d = byKey[key] || { expense: 0, income: 0, investment: 0, asset: null };
+    return `
+      <tr data-month="${key}">
+        <td class="col-month">${monthLabelOf(key)}</td>
+        <td><input type="text" inputmode="numeric" class="asset-input mono" data-month="${key}" value="${d.asset != null ? fmtNum(d.asset) : ""}" placeholder="입력" /></td>
+        <td class="col-readonly expense mono">${fmtNum(d.expense)}</td>
+        <td class="col-readonly income mono">${fmtNum(d.income)}</td>
+        <td class="col-readonly investment mono">${fmtNum(d.investment)}</td>
+      </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll(".asset-input").forEach(input => {
+    input.addEventListener("input", () => {
+      const digits = input.value.replace(/[^0-9]/g, "");
+      input.value = digits ? Number(digits).toLocaleString("ko-KR") : "";
+    });
+    input.addEventListener("blur", async () => {
+      const key = input.dataset.month;
+      const digits = input.value.replace(/[^0-9]/g, "");
+      const value = digits ? Number(digits) : null;
+
+      let entry = state.assetsMonths.find(m => m.monthKey === key);
+      if (!entry) {
+        entry = { monthKey: key, expense: 0, income: 0, investment: 0, asset: null };
+        state.assetsMonths.push(entry);
+        state.assetsMonths.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+      }
+      if (entry.asset === value) return; // 변경 없으면 저장 생략
+      entry.asset = value;
+      try {
+        await saveManualAsset(state.currentLedger, key, value);
+        flashSync();
+      } catch (err) {
+        console.error("자산 저장 실패:", err);
+        alert("자산 저장에 실패했습니다.\n" + err.message);
+      }
+    });
+  });
+}
+
+document.getElementById("assetsTableStartSelect").addEventListener("change", (e) => {
+  state.tableStartMonth = e.target.value;
+  if (state.tableStartMonth > state.tableEndMonth) {
+    state.tableEndMonth = state.tableStartMonth;
+    document.getElementById("assetsTableEndSelect").value = state.tableEndMonth;
+  }
+  renderAssetsTable();
+});
+
+document.getElementById("assetsTableEndSelect").addEventListener("change", (e) => {
+  state.tableEndMonth = e.target.value;
+  if (state.tableEndMonth < state.tableStartMonth) {
+    state.tableStartMonth = state.tableEndMonth;
+    document.getElementById("assetsTableStartSelect").value = state.tableStartMonth;
+  }
+  renderAssetsTable();
+});
+
+/* ---------- 차트 화면 ---------- */
+
 // y좌표가 그래프 위쪽 가장자리에 너무 가까우면 값 라벨을 점 아래로 내려서 잘리지 않게 한다.
 function valueLabelY(y, plotTop) {
   return (y - plotTop) < 12 ? y + 11 : y - 6;
@@ -1663,19 +1794,19 @@ function renderComboChart(svg, months) {
     <text x="${xOfCenter(n - 1).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="end">${lastLabel}</text>`;
 }
 
-function renderAssets() {
-  document.querySelectorAll("#assetsMetricFilter .chip").forEach(c => {
-    c.classList.toggle("active", c.dataset.metric === state.assetsMetric);
+function renderChart() {
+  document.querySelectorAll("#chartMetricFilter .chip").forEach(c => {
+    c.classList.toggle("active", c.dataset.metric === state.chartMetric);
   });
 
-  const metric = state.assetsMetric;
-  const chartEl = document.getElementById("assetsChart");
-  const emptyMsg = document.getElementById("assetsEmpty");
-  const listEl = document.getElementById("assetsList");
-  const totalLabel = document.getElementById("assetsTotalLabel");
-  const legendEl = document.getElementById("assetsLegend");
+  const metric = state.chartMetric;
+  const chartEl = document.getElementById("chartSvg");
+  const emptyMsg = document.getElementById("chartEmpty");
+  const listEl = document.getElementById("chartList");
+  const totalLabel = document.getElementById("chartTotalLabel");
+  const legendEl = document.getElementById("chartLegend");
 
-  if (state.assetsMonths.length === 0 || !state.assetsStartMonth || !state.assetsEndMonth) {
+  if (state.assetsMonths.length === 0 || !state.chartStartMonth || !state.chartEndMonth) {
     emptyMsg.style.display = "block";
     chartEl.innerHTML = "";
     legendEl.style.display = "none";
@@ -1688,20 +1819,23 @@ function renderAssets() {
   const byKey = {};
   state.assetsMonths.forEach(m => { byKey[m.monthKey] = m; });
 
-  // 누적 잔고는 선택 범위와 무관하게 항상 실제 최초 월부터 계산해야
-  // 시작월을 뒤로 옮겨도 그 시점까지의 누적값이 끊기지 않는다.
+  // 잔고는 사용자가 수기로 입력한 자산 값을 그대로 쓰되, 입력이 없는 달은
+  // 직전에 입력된 값을 그대로 이어간다(carry-forward). 아직 한 번도
+  // 입력하지 않았다면 0으로 취급한다.
   const earliestKey = state.assetsMonths[0].monthKey;
-  const historyStart = earliestKey < state.assetsEndMonth ? earliestKey : state.assetsEndMonth;
-  const fullRange = buildMonthRange(historyStart, state.assetsEndMonth).map(key => {
-    const d = byKey[key] || { expense: 0, income: 0, investment: 0 };
-    return { monthKey: key, expense: d.expense, income: d.income, investment: d.investment };
+  const historyStart = earliestKey < state.chartEndMonth ? earliestKey : state.chartEndMonth;
+  const fullRangeKeys = buildMonthRange(historyStart, state.chartEndMonth);
+
+  let lastAsset = 0;
+  const fullRange = fullRangeKeys.map(key => {
+    const d = byKey[key] || { expense: 0, income: 0, investment: 0, asset: null };
+    if (d.asset != null) lastAsset = d.asset;
+    return { monthKey: key, expense: d.expense, income: d.income, investment: d.investment, balance: lastAsset };
   });
-  let running = 0;
-  fullRange.forEach(m => { running += (m.income - m.expense); m.balance = running; });
 
   const byKeyFull = {};
   fullRange.forEach(m => { byKeyFull[m.monthKey] = m; });
-  const months = buildMonthRange(state.assetsStartMonth, state.assetsEndMonth).map(key => byKeyFull[key]);
+  const months = buildMonthRange(state.chartStartMonth, state.chartEndMonth).map(key => byKeyFull[key]);
 
   if (metric === "all") {
     legendEl.style.display = "flex";
@@ -1729,7 +1863,7 @@ function renderAssets() {
     } else {
       sign = "+"; amt = m.investment; cls = "investment";
     }
-    const expanded = state.assetsExpandedMonths.has(m.monthKey);
+    const expanded = state.chartExpandedMonths.has(m.monthKey);
     const balSign = m.balance < 0 ? "-" : "+";
     const breakdownHtml = expanded ? `
       <div class="cat-entries">
@@ -1753,36 +1887,36 @@ function renderAssets() {
   listEl.querySelectorAll(".cat-row[data-month]").forEach(btn => {
     btn.addEventListener("click", () => {
       const key = btn.dataset.month;
-      if (state.assetsExpandedMonths.has(key)) state.assetsExpandedMonths.delete(key);
-      else state.assetsExpandedMonths.add(key);
-      renderAssets();
+      if (state.chartExpandedMonths.has(key)) state.chartExpandedMonths.delete(key);
+      else state.chartExpandedMonths.add(key);
+      renderChart();
     });
   });
 }
 
-document.getElementById("assetsMetricFilter").addEventListener("click", (e) => {
+document.getElementById("chartMetricFilter").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
-  state.assetsMetric = chip.dataset.metric;
-  renderAssets();
+  state.chartMetric = chip.dataset.metric;
+  renderChart();
 });
 
-document.getElementById("assetsStartSelect").addEventListener("change", (e) => {
-  state.assetsStartMonth = e.target.value;
-  if (state.assetsStartMonth > state.assetsEndMonth) {
-    state.assetsEndMonth = state.assetsStartMonth;
-    document.getElementById("assetsEndSelect").value = state.assetsEndMonth;
+document.getElementById("chartStartSelect").addEventListener("change", (e) => {
+  state.chartStartMonth = e.target.value;
+  if (state.chartStartMonth > state.chartEndMonth) {
+    state.chartEndMonth = state.chartStartMonth;
+    document.getElementById("chartEndSelect").value = state.chartEndMonth;
   }
-  renderAssets();
+  renderChart();
 });
 
-document.getElementById("assetsEndSelect").addEventListener("change", (e) => {
-  state.assetsEndMonth = e.target.value;
-  if (state.assetsEndMonth < state.assetsStartMonth) {
-    state.assetsStartMonth = state.assetsEndMonth;
-    document.getElementById("assetsStartSelect").value = state.assetsStartMonth;
+document.getElementById("chartEndSelect").addEventListener("change", (e) => {
+  state.chartEndMonth = e.target.value;
+  if (state.chartEndMonth < state.chartStartMonth) {
+    state.chartStartMonth = state.chartEndMonth;
+    document.getElementById("chartStartSelect").value = state.chartStartMonth;
   }
-  renderAssets();
+  renderChart();
 });
 
 /* ====================== 입력 모달 ====================== */
