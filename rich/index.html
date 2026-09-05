@@ -1138,17 +1138,20 @@ function updateLedgerToggleVisibility(screenName) {
   document.getElementById("ledgerToggle").style.display = screenName === "assets" ? "none" : "flex";
 }
 
+// 새로고침해도 마지막으로 보고 있던 화면에 그대로 머물도록 localStorage에 기억해둔다.
+function switchScreen(screenName) {
+  document.querySelectorAll(".tabbtn[data-screen]").forEach(b => b.classList.toggle("active", b.dataset.screen === screenName));
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById("screen-" + screenName).classList.add("active");
+  updateLedgerToggleVisibility(screenName);
+  if (screenName === "chart") loadAssetMonthlyData();
+  // 대시보드는 숨겨져 있는 동안 그려졌을 수 있어(% 라벨 실측이 부정확) 보일 때 다시 그린다.
+  if (screenName === "dashboard") renderDashboard();
+  localStorage.setItem("active_screen", screenName);
+}
+
 document.querySelectorAll(".tabbtn[data-screen]").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tabbtn[data-screen]").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-    document.getElementById("screen-" + btn.dataset.screen).classList.add("active");
-    updateLedgerToggleVisibility(btn.dataset.screen);
-    if (btn.dataset.screen === "chart") loadAssetMonthlyData();
-    // 대시보드는 숨겨져 있는 동안 그려졌을 수 있어(% 라벨 실측이 부정확) 보일 때 다시 그린다.
-    if (btn.dataset.screen === "dashboard") renderDashboard();
-  });
+  btn.addEventListener("click", () => switchScreen(btn.dataset.screen));
 });
 
 /* ====================== 달력 화면 ====================== */
@@ -3079,6 +3082,9 @@ listenCalendarMonth(state.currentLedger, state.calDate);
 listenDashboardMonth(state.currentLedger, state.dashDate);
 listenAssetStructure(ASSET_LEDGER_KEY);
 listenAssetMonthValues(ASSET_LEDGER_KEY, state.assetsDate);
+
+const savedScreen = localStorage.getItem("active_screen");
+if (savedScreen && document.getElementById("screen-" + savedScreen)) switchScreen(savedScreen);
 </script>
 </body>
 </html>
