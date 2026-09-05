@@ -340,7 +340,7 @@
     flex-shrink:0; font-size:11px; font-weight:700; padding:2px 6px; border-radius:6px;
   }
   .owner-tag.owner-shared{ color:#D97757; background: rgba(217,119,87,0.14); }
-  .owner-tag.owner-jihyeon{ color:#4B8060; background: rgba(75,128,96,0.14); }
+  .owner-tag.owner-jihyeon{ color:#B8960C; background: rgba(184,150,12,0.16); }
   .owner-tag.owner-hyeonje{ color:#5B7FA6; background: rgba(91,127,166,0.14); }
 
   .value-cell{ display:inline-flex; align-items:center; flex-shrink:0; }
@@ -597,9 +597,9 @@
       <span class="dash-total mono" id="assetsMonthTotal">0원</span>
       <div class="chip-row" id="assetOwnerFilter">
         <button class="chip active" data-owner="all">전체</button>
-        <button class="chip" data-owner="shared">공용</button>
         <button class="chip" data-owner="jihyeon">지현</button>
         <button class="chip" data-owner="hyeonje">현제</button>
+        <button class="chip" data-owner="shared">공용</button>
       </div>
       <button id="manageAssetBtn">⚙️</button>
     </div>
@@ -766,7 +766,7 @@ const ASSET_LEDGER_KEY = "jihyeon";
 /* ====================== 상수 정의 ====================== */
 const LEDGERS = [
   { id: "shared",  label: "공용 가계부", color: "#D97757" },
-  { id: "jihyeon",  label: "지현 가계부", color: "#4B8060" },
+  { id: "jihyeon",  label: "지현 가계부", color: "#B8960C" },
   { id: "hyeonje", label: "현제 가계부", color: "#5B7FA6" },
 ];
 // 자산 항목의 소유 가계부 표시용 짧은 이름 (관리 목록, 필터 칩 등에서 사용)
