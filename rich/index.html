@@ -7,14 +7,20 @@
 <link rel="icon" type="image/png" href="icons/icon-32.png" />
 <link rel="apple-touch-icon" href="icons/icon-180.png" />
 
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
-
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <style>
+  @font-face{
+    font-family: "NeoDunggeunmo";
+    src: url("fonts/neodgm.woff2") format("woff2");
+    font-weight: normal; font-style: normal; font-display: swap;
+  }
+  @font-face{
+    font-family: "NeoDunggeunmo Code";
+    src: url("fonts/neodgm_code.woff2") format("woff2");
+    font-weight: normal; font-style: normal; font-display: swap;
+  }
   :root{
     --bg: #E7F7F8;
     --card: #FFFFFF;
@@ -40,11 +46,11 @@
     margin:0; padding:0;
     background: var(--bg);
     color: var(--text);
-    font-family: "IBM Plex Sans KR", -apple-system, sans-serif;
+    font-family: "NeoDunggeunmo", -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
   }
-  .mono{ font-family: "Space Mono", monospace; }
+  .mono{ font-family: "NeoDunggeunmo Code", monospace; }
   #app{
     max-width: 640px;
     margin: 0 auto;
@@ -303,7 +309,7 @@
   .donut-callouts{ position:absolute; inset:0; pointer-events:none; }
   .donut-center-label{
     position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-    font-family:"Space Mono", monospace; font-weight:700; font-size:15px;
+    font-family:"NeoDunggeunmo Code", monospace; font-weight:700; font-size:15px;
     color: var(--text); pointer-events:none;
   }
   .donut-callout{
@@ -395,7 +401,7 @@
 
   .amount-input{
     width:100%; border:none; background:none; text-align:center;
-    font-family:"Space Mono", monospace; font-size:40px; font-weight:700;
+    font-family:"NeoDunggeunmo Code", monospace; font-size:40px; font-weight:700;
     color: var(--text); padding: 8px 0 20px; outline:none;
   }
   .amount-input::placeholder{ color: var(--border); }
