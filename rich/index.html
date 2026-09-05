@@ -884,16 +884,23 @@ const CATEGORIES_HYEONJE = {
   asset: ASSET_CATEGORIES,
 };
 
+// 투자 카테고리는 더 이상 고정 목록이 아니라, 자산 항목 관리에서 등록한 자산 분류를
+// 그대로 따른다 (분류 순서도 자산 분류 순서와 동일하게 유지된다).
+function dynamicInvestmentCategories() {
+  return state.assetCategories.map(cat => ({ id: cat.id, label: cat.label, icon: cat.icon || DEFAULT_ASSET_ICON }));
+}
+
 function categoriesForLedger(ledgerId) {
-  if (ledgerId === "shared") return CATEGORIES_SHARED;
+  if (ledgerId === "shared") return { ...CATEGORIES_SHARED, investment: dynamicInvestmentCategories() };
   if (ledgerId === "hyeonje") return CATEGORIES_HYEONJE;
   return CATEGORIES_JIHYEON;
 }
 
-// 내역 추가 시 타입별로 기본 선택될 카테고리 (수입→급여, 투자→ISA, 자산→자산, 공용 지출→식료품)
+// 내역 추가 시 타입별로 기본 선택될 카테고리 (수입→급여, 투자→첫 번째 자산 분류, 자산→자산, 공용 지출→식료품)
 function defaultCategoryFor(targetLedger, type) {
   const cats = categoriesForLedger(targetLedger)[type] || [];
-  const preferred = type === "income" ? "salary" : type === "investment" ? "isa" : type === "asset" ? "asset_etc" : (targetLedger === "shared" ? "groceries" : null);
+  if (type === "investment") return cats[0] ? cats[0].id : null;
+  const preferred = type === "income" ? "salary" : type === "asset" ? "asset_etc" : (targetLedger === "shared" ? "groceries" : null);
   return (preferred && cats.some(c => c.id === preferred)) ? preferred : null;
 }
 
