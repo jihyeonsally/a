@@ -561,6 +561,7 @@
         <button id="dashExpenseBtn" class="active expense">지출</button>
         <button id="dashIncomeBtn" class="income">수입</button>
         <button id="dashInvestmentBtn" class="investment" style="display:none;">투자</button>
+        <button id="dashAllBtn" class="all" style="display:none;">전체</button>
       </div>
     </div>
     <div class="payer-nav-row">
@@ -1074,11 +1075,12 @@ function switchLedger(id) {
   state.chartStartMonth = null;
   state.chartEndMonth = null;
   state.chartExpandedMonths = new Set();
-  if (id !== "shared" && (state.dashType === "investment" || state.dashType === "income")) {
+  if (id !== "shared" && (state.dashType === "investment" || state.dashType === "income" || state.dashType === "all")) {
     state.dashType = "expense";
     document.getElementById("dashExpenseBtn").classList.add("active");
     document.getElementById("dashIncomeBtn").classList.remove("active");
     document.getElementById("dashInvestmentBtn").classList.remove("active");
+    document.getElementById("dashAllBtn").classList.remove("active");
   }
   // 지현/현제 가계부는 지출만 기록하므로, 차트 화면의 지표 토글도 지출로 고정한다.
   if (id !== "shared") state.chartMetric = "expense";
@@ -1108,6 +1110,7 @@ function updateDashTypeVisibility() {
   const isShared = state.currentLedger === "shared";
   document.getElementById("dashInvestmentBtn").style.display = isShared ? "" : "none";
   document.getElementById("dashIncomeBtn").style.display = isShared ? "" : "none";
+  document.getElementById("dashAllBtn").style.display = isShared ? "" : "none";
 }
 
 // 지현/현제 가계부는 지출 내역만 등록할 수 있으므로, 차트 화면에서도
@@ -1334,30 +1337,18 @@ document.getElementById("nextMonth").addEventListener("click", () => {
 });
 
 /* ====================== 대시보드 화면 ====================== */
-document.getElementById("dashExpenseBtn").addEventListener("click", () => {
-  state.dashType = "expense";
+function setDashType(type) {
+  state.dashType = type;
   state.dashExpandedCats = new Set();
-  document.getElementById("dashExpenseBtn").classList.add("active");
-  document.getElementById("dashIncomeBtn").classList.remove("active");
-  document.getElementById("dashInvestmentBtn").classList.remove("active");
+  ["dashExpenseBtn", "dashIncomeBtn", "dashInvestmentBtn", "dashAllBtn"].forEach(id => {
+    document.getElementById(id).classList.toggle("active", id === `dash${type[0].toUpperCase()}${type.slice(1)}Btn`);
+  });
   renderDashboard();
-});
-document.getElementById("dashIncomeBtn").addEventListener("click", () => {
-  state.dashType = "income";
-  state.dashExpandedCats = new Set();
-  document.getElementById("dashIncomeBtn").classList.add("active");
-  document.getElementById("dashExpenseBtn").classList.remove("active");
-  document.getElementById("dashInvestmentBtn").classList.remove("active");
-  renderDashboard();
-});
-document.getElementById("dashInvestmentBtn").addEventListener("click", () => {
-  state.dashType = "investment";
-  state.dashExpandedCats = new Set();
-  document.getElementById("dashInvestmentBtn").classList.add("active");
-  document.getElementById("dashExpenseBtn").classList.remove("active");
-  document.getElementById("dashIncomeBtn").classList.remove("active");
-  renderDashboard();
-});
+}
+document.getElementById("dashExpenseBtn").addEventListener("click", () => setDashType("expense"));
+document.getElementById("dashIncomeBtn").addEventListener("click", () => setDashType("income"));
+document.getElementById("dashInvestmentBtn").addEventListener("click", () => setDashType("investment"));
+document.getElementById("dashAllBtn").addEventListener("click", () => setDashType("all"));
 document.getElementById("dashPrevMonth").addEventListener("click", () => {
   state.dashDate = new Date(state.dashDate.getFullYear(), state.dashDate.getMonth() - 1, 1);
   state.dashEntries = [];
@@ -1465,9 +1456,14 @@ function donutSegmentPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
   return `M ${so.x.toFixed(2)} ${so.y.toFixed(2)} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${eo.x.toFixed(2)} ${eo.y.toFixed(2)} L ${si.x.toFixed(2)} ${si.y.toFixed(2)} A ${rInner} ${rInner} 0 ${largeArc} 0 ${ei.x.toFixed(2)} ${ei.y.toFixed(2)} Z`;
 }
 
-function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, remainingShare) {
+// segmentColors: 카테고리별 색을 고정하고 싶을 때(예: 대시보드 "전체" 탭처럼 서로 다른
+// 타입을 한 도넛에 섞어 보여줄 때) catsWithAmount와 같은 순서로 CSS 색상을 전달한다.
+// 생략하면 기존처럼 type 하나를 기준으로 한 색상 계열의 명암 단계로 자동 배정된다.
+function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, remainingShare, segmentColors) {
   const CX = 100, CY = 100, R_OUT = 72, R_IN = 38, LINE_R = 90, LINE_END_R = 80;
   const hasRemaining = remainingShare > 0.001;
+  const colorFor = (i, count) => segmentColors ? segmentColors[i] : segmentShade(type, i, count);
+  const textColorFor = (i, count) => segmentColors ? "#FFFFFF" : (segmentLightness(i, count) > 68 ? "var(--text)" : "#FFFFFF");
 
   if (catsWithAmount.length === 0 && hasRemaining) {
     // 지출 없이 수입만 있는 달: 원 전체가 "남은 돈"
@@ -1485,9 +1481,9 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
     const tip = polarPoint(CX, CY, LINE_R, 0);
     const lineEnd = polarPoint(CX, CY, LINE_END_R, 0);
     const pctPoint = polarPoint(CX, CY, (R_OUT + R_IN) / 2, 0);
-    const textColor = segmentLightness(0, 1) > 68 ? "var(--text)" : "#FFFFFF";
+    const textColor = textColorFor(0, 1);
     svg.innerHTML = `
-      <circle cx="${CX}" cy="${CY}" r="${R_OUT}" fill="${segmentShade(type, 0, 1)}" />
+      <circle cx="${CX}" cy="${CY}" r="${R_OUT}" fill="${colorFor(0, 1)}" />
       <circle cx="${CX}" cy="${CY}" r="${R_IN}" fill="var(--card)" />
       <text x="${pctPoint.x.toFixed(2)}" y="${pctPoint.y.toFixed(2)}" font-size="10" font-weight="600" fill="${textColor}" text-anchor="middle" dominant-baseline="central">100%</text>
       <line x1="${CX}" y1="${CY - R_OUT}" x2="${lineEnd.x.toFixed(2)}" y2="${lineEnd.y.toFixed(2)}" stroke="#000000" stroke-width="0.75" />`;
@@ -1513,10 +1509,10 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
     const mid = start + sweep / 2;
     angle = end;
 
-    segParts += `<path d="${donutSegmentPath(CX, CY, R_OUT, R_IN, start, end)}" fill="${segmentShade(type, i, catsWithAmount.length)}" />`;
+    segParts += `<path d="${donutSegmentPath(CX, CY, R_OUT, R_IN, start, end)}" fill="${colorFor(i, catsWithAmount.length)}" />`;
 
     const pctPoint = polarPoint(CX, CY, (R_OUT + R_IN) / 2, mid);
-    const textColor = segmentLightness(i, catsWithAmount.length) > 68 ? "var(--text)" : "#FFFFFF";
+    const textColor = textColorFor(i, catsWithAmount.length);
     pctCandidates.push({ x: pctPoint.x, y: pctPoint.y, text: `${Math.round(share * 100)}%`, color: textColor, sweep, share });
 
     if (share > threshold) calloutItems.push({ trueMid: mid, mid, icon: c.icon });
@@ -1672,6 +1668,11 @@ function renderDashboard() {
     return entries;
   };
 
+  if (state.dashType === "all") {
+    renderDashboardAllTab(applyPayerFilter);
+    return;
+  }
+
   const filtered = applyPayerFilter(state.dashEntries.filter(e => e.type === state.dashType));
   const totalAmount = filtered.reduce((sum, e) => sum + Number(e.amount), 0);
   const sign = state.dashType === "income" ? "+" : state.dashType === "investment" ? "₩" : "-";
@@ -1763,6 +1764,61 @@ function renderDashboard() {
       if (entry) openEditModal(entry, state.currentLedger);
     });
   });
+}
+
+// 대시보드 "전체" 탭: 그 달의 수입을 100%로 놓고 지출/투자가 차지하는 비중을 도넛으로 보여준다.
+function renderDashboardAllTab(applyPayerFilter) {
+  document.getElementById("dashWarning").style.display = "none";
+
+  const incomeTotal = applyPayerFilter(state.dashEntries.filter(e => e.type === "income")).reduce((sum, e) => sum + Number(e.amount), 0);
+  const expenseTotal = applyPayerFilter(state.dashEntries.filter(e => e.type === "expense")).reduce((sum, e) => sum + Number(e.amount), 0);
+  const investmentTotal = applyPayerFilter(state.dashEntries.filter(e => e.type === "investment")).reduce((sum, e) => sum + Number(e.amount), 0);
+
+  const dashTotalEl = document.getElementById("dashTotal");
+  dashTotalEl.textContent = `${fmtNum(expenseTotal + investmentTotal)}원`;
+  dashTotalEl.className = "dash-total mono";
+
+  const ALL_TAB_CATS = [
+    { id: "expense_total", label: "지출", icon: "💸" },
+    { id: "investment_total", label: "투자", icon: "📈" },
+  ];
+  const totals = { expense_total: expenseTotal, investment_total: investmentTotal };
+  const colorById = { expense_total: "var(--expense)", investment_total: "var(--invest)" };
+
+  const catsWithAmount = ALL_TAB_CATS.filter(c => totals[c.id] > 0).sort((a, b) => totals[b.id] - totals[a.id]);
+  const segmentColors = catsWithAmount.map(c => colorById[c.id]);
+
+  // 수입을 100%로 놓되, 지출+투자가 수입을 초과하면(과소비) 그 합계를 기준으로 삼아
+  // 남는 비중(remainingShare)이 음수가 되지 않게 한다.
+  const donutDenom = Math.max(incomeTotal, expenseTotal + investmentTotal);
+  let remainingShare = 0;
+  if (donutDenom > 0) {
+    remainingShare = Math.max(0, incomeTotal - expenseTotal - investmentTotal) / donutDenom;
+  }
+
+  const chartEl = document.getElementById("dashChart");
+  const calloutsEl = document.getElementById("donutCallouts");
+  const emptyMsg = document.getElementById("dashEmpty");
+
+  if (catsWithAmount.length === 0 && remainingShare <= 0.001) {
+    emptyMsg.style.display = "block";
+    chartEl.innerHTML = "";
+    calloutsEl.innerHTML = "";
+  } else {
+    emptyMsg.style.display = "none";
+    renderDonutChart(chartEl, calloutsEl, catsWithAmount, totals, donutDenom, "all", remainingShare, segmentColors);
+  }
+
+  document.getElementById("catList").innerHTML = `
+    <div class="cat-row-wrap"><div class="cat-row" style="cursor:default;">
+      <span class="icon">💸</span><span class="name">지출</span><span class="amt expense">-${fmtNum(expenseTotal)}원</span>
+    </div></div>
+    <div class="cat-row-wrap"><div class="cat-row" style="cursor:default;">
+      <span class="icon">💰</span><span class="name">수입</span><span class="amt income">+${fmtNum(incomeTotal)}원</span>
+    </div></div>
+    <div class="cat-row-wrap"><div class="cat-row" style="cursor:default;">
+      <span class="icon">📈</span><span class="name">투자</span><span class="amt investment">₩${fmtNum(investmentTotal)}원</span>
+    </div></div>`;
 }
 
 /* ====================== 자산 입력 / 차트 화면 ======================
