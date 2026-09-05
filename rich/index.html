@@ -188,6 +188,7 @@
   .day-detail-row .amt.expense{ color: var(--expense); }
   .day-detail-row .amt.income{ color: var(--income); }
   .day-detail-row .amt.investment{ color: var(--invest); }
+  .day-detail-row .amt.asset{ color: var(--income); }
 
   /* ---------- Bottom tab bar ---------- */
   .tabbar{
@@ -262,27 +263,6 @@
   #chartMetricFilter .chip.active.income{ background: var(--income); color:#fff; border-color: var(--income); }
   #chartMetricFilter .chip.active.investment{ background: var(--invest); color:#fff; border-color: var(--invest); }
 
-  .assets-table-card{ display:block; padding:0; overflow:hidden; }
-  .assets-table-scroll{ width:100%; overflow-x:auto; }
-  .assets-table{ width:100%; border-collapse:collapse; font-size:13px; white-space:nowrap; }
-  .assets-table th{
-    text-align:right; font-size:11px; font-weight:700; color: var(--text-dim);
-    padding: 10px 10px; border-bottom:1px solid var(--border); background: var(--bg);
-    position:sticky; top:0;
-  }
-  .assets-table th:first-child, .assets-table td:first-child{ text-align:left; }
-  .assets-table td{ padding: 8px 10px; border-bottom:1px solid var(--border); text-align:right; }
-  .assets-table td.col-month{ font-weight:600; color: var(--text); }
-  .assets-table td.col-readonly.expense{ color: var(--expense); }
-  .assets-table td.col-readonly.income{ color: var(--income); }
-  .assets-table td.col-readonly.investment{ color: var(--invest); }
-  .asset-input{
-    width:90px; padding: 6px 8px; border-radius:8px; border:1px solid var(--border);
-    background: var(--accent-soft); font-family: inherit; font-size:13px; color: var(--text);
-    text-align:right; outline:none;
-  }
-  .asset-input:focus{ border-color: var(--accent); }
-  .asset-input::placeholder{ color: var(--text-dim); }
 
   .dash-card{
     margin: 0 16px 16px;
@@ -533,25 +513,21 @@
     <div class="cat-list" id="catList"></div>
   </div>
 
-  <!-- Screen 3: Asset entry (엑셀처럼 매월 자산을 수기 입력) -->
+  <!-- Screen 3: Asset entries (월별 자산 내역 목록) -->
   <div class="screen" id="screen-assets">
-    <div class="dash-toggle">
-      <span class="dash-total mono">자산 입력</span>
-    </div>
-    <div class="assets-daterange-row">
-      <select id="assetsTableStartSelect" class="assets-month-select"></select>
-      <span class="assets-daterange-sep">~</span>
-      <select id="assetsTableEndSelect" class="assets-month-select"></select>
-    </div>
-    <div class="dash-card assets-table-card">
-      <div class="assets-table-scroll">
-        <table class="assets-table">
-          <thead>
-            <tr><th>연-월</th><th>자산</th><th>지출</th><th>수입</th><th>투자</th></tr>
-          </thead>
-          <tbody id="assetsTableBody"></tbody>
-        </table>
+    <div class="month-nav">
+      <h2 id="assetsMonthLabel"></h2>
+      <div class="navbtns">
+        <button class="navbtn" id="assetsPrevMonth">‹</button>
+        <button class="navbtn" id="assetsNextMonth">›</button>
       </div>
+    </div>
+    <div class="dash-toggle">
+      <span class="dash-total mono" id="assetsMonthTotal">0원</span>
+      <button class="search-btn" id="assetsAddBtn" aria-label="자산 추가">+</button>
+    </div>
+    <div class="day-detail" style="display:block; margin:12px 16px 20px;">
+      <div id="assetsEntryList"></div>
     </div>
   </div>
 
@@ -709,6 +685,11 @@ const INCOME_CATEGORIES = [
   { id: "etc_i",    label: "기타",       icon: "📦", color: "#A6998A" },
 ];
 
+// 자산 내역 카테고리는 아직 세부 분류 없이 단일 항목만 등록 (추후 재정의 예정)
+const ASSET_CATEGORIES = [
+  { id: "asset_etc", label: "자산", icon: "💰", color: "#4B8060" },
+];
+
 // 공용 가계부 카테고리
 const CATEGORIES_SHARED = {
   expense: [
@@ -739,6 +720,7 @@ const CATEGORIES_SHARED = {
     { id: "pension",     label: "연금",       icon: "🧓", color: "#7E6BA6" },
     { id: "gold",        label: "금현물",     icon: "🥇", color: "#C9A227" },
   ],
+  asset: ASSET_CATEGORIES,
 };
 
 // 지현 개인 가계부 카테고리
@@ -761,6 +743,7 @@ const CATEGORIES_JIHYEON = {
     { id: "travel",       label: "여행",       icon: "✈️", color: "#5B9BD5" },
   ],
   income: INCOME_CATEGORIES,
+  asset: ASSET_CATEGORIES,
 };
 
 // 현제 개인 가계부 카테고리 (식료품 대신 점심)
@@ -784,6 +767,7 @@ const CATEGORIES_HYEONJE = {
     { id: "travel",       label: "여행",       icon: "✈️", color: "#5B9BD5" },
   ],
   income: INCOME_CATEGORIES,
+  asset: ASSET_CATEGORIES,
 };
 
 function categoriesForLedger(ledgerId) {
@@ -792,10 +776,10 @@ function categoriesForLedger(ledgerId) {
   return CATEGORIES_JIHYEON;
 }
 
-// 내역 추가 시 타입별로 기본 선택될 카테고리 (수입→급여, 투자→ISA, 공용 지출→식료품)
+// 내역 추가 시 타입별로 기본 선택될 카테고리 (수입→급여, 투자→ISA, 자산→자산, 공용 지출→식료품)
 function defaultCategoryFor(targetLedger, type) {
   const cats = categoriesForLedger(targetLedger)[type] || [];
-  const preferred = type === "income" ? "salary" : type === "investment" ? "isa" : (targetLedger === "shared" ? "groceries" : null);
+  const preferred = type === "income" ? "salary" : type === "investment" ? "isa" : type === "asset" ? "asset_etc" : (targetLedger === "shared" ? "groceries" : null);
   return (preferred && cats.some(c => c.id === preferred)) ? preferred : null;
 }
 
@@ -822,9 +806,10 @@ const state = {
   editingEntry: null, // { original: entry, ledgerId } — set when the modal is editing an existing entry
   calUnsub: null,
   dashUnsub: null,
-  assetsMonths: [],  // [{ monthKey, expense, income, investment, asset }] 오름차순, 현재 가계부의 월별 데이터 (전체 기간)
-  tableStartMonth: null, // 자산 입력 화면 표시 범위 시작 "YYYY-MM" (null이면 다음 로드 시 자동 선택)
-  tableEndMonth: null,   // 자산 입력 화면 표시 범위 종료 "YYYY-MM" (기본값: 오늘이 속한 연월)
+  assetsDate: new Date(), // 자산 화면에서 보고 있는 월
+  assetsCalEntries: [],   // 그 달의 자산(type: "asset") 내역
+  assetsUnsub: null,
+  assetsMonths: [],  // [{ monthKey, expense, income, investment, asset }] 오름차순, 현재 가계부의 월별 데이터 (전체 기간, 차트용)
   chartMetric: "all", // 차트 화면 하단 토글 ("all" | "balance" | "expense" | "income" | "investment")
   chartStartMonth: null, // 차트 화면 표시 범위 시작 "YYYY-MM"
   chartEndMonth: null,   // 차트 화면 표시 범위 종료 "YYYY-MM" (기본값: 오늘이 속한 연월)
@@ -871,6 +856,20 @@ function listenDashboardMonth(ledgerId, dateObj) {
   });
 }
 
+function listenAssetsMonth(ledgerId, dateObj) {
+  if (state.assetsUnsub) state.assetsUnsub();
+  const docId = monthDocId(ledgerId, monthKeyOf(dateObj));
+  state.assetsUnsub = db.collection(COLLECTION).doc(docId).onSnapshot((snap) => {
+    const data = snap.data();
+    const entries = (data && data.entries) ? data.entries.slice() : [];
+    state.assetsCalEntries = entries.filter(e => e.type === "asset");
+    renderAssetsScreen();
+    flashSync();
+  }, (err) => {
+    console.error("Firestore listen error (assets):", err);
+  });
+}
+
 function flashSync() {
   const badge = document.getElementById("syncBadge");
   badge.classList.add("show");
@@ -892,12 +891,6 @@ async function deleteEntry(entry, ledgerId) {
   });
 }
 
-// 자산 입력 화면에서 수기로 입력한 월별 자산 값을 저장한다 (entries 배열과는 별개 필드).
-async function saveManualAsset(ledgerId, monthKey, value) {
-  const docId = monthDocId(ledgerId, monthKey);
-  await db.collection(COLLECTION).doc(docId).set({ asset: value }, { merge: true });
-}
-
 /* ====================== 가계부 전환 ====================== */
 function switchLedger(id) {
   state.currentLedger = id;
@@ -906,9 +899,8 @@ function switchLedger(id) {
   state.dashExpandedCats = new Set();
   state.calEntries = [];
   state.dashEntries = [];
+  state.assetsCalEntries = [];
   // 가계부가 바뀌면 다음 로드 시 그 가계부 기준으로 기본 범위를 재계산한다.
-  state.tableStartMonth = null;
-  state.tableEndMonth = null;
   state.chartStartMonth = null;
   state.chartEndMonth = null;
   state.chartExpandedMonths = new Set();
@@ -927,8 +919,10 @@ function switchLedger(id) {
   renderDashboard();
   listenCalendarMonth(id, state.calDate);
   listenDashboardMonth(id, state.dashDate);
+  renderAssetsScreen();
+  listenAssetsMonth(id, state.assetsDate);
   const activeScreenId = document.querySelector(".screen.active").id;
-  if (activeScreenId === "screen-assets" || activeScreenId === "screen-chart") loadAssetMonthlyData();
+  if (activeScreenId === "screen-chart") loadAssetMonthlyData();
 }
 
 function renderLedgerToggle() {
@@ -956,7 +950,7 @@ document.querySelectorAll(".tabbtn[data-screen]").forEach(btn => {
     btn.classList.add("active");
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById("screen-" + btn.dataset.screen).classList.add("active");
-    if (btn.dataset.screen === "assets" || btn.dataset.screen === "chart") loadAssetMonthlyData();
+    if (btn.dataset.screen === "chart") loadAssetMonthlyData();
   });
 });
 
@@ -991,6 +985,7 @@ function renderCalendar() {
 
   const entriesByDate = {};
   state.calEntries.forEach(e => {
+    if (e.type === "asset") return; // 자산 내역은 별도 화면에서 관리하므로 달력에는 표시하지 않는다.
     (entriesByDate[e.date] = entriesByDate[e.date] || []).push(e);
   });
 
@@ -1062,7 +1057,7 @@ function renderDayDetail() {
     `<span class="${weekdayClass(dow)}">${Number(m)}월 ${Number(d)}일 (${wd})</span> 내역`;
 
   const dayEntries = state.calEntries
-    .filter(e => e.date === state.selectedDate)
+    .filter(e => e.date === state.selectedDate && e.type !== "asset")
     .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 
   const listEl = document.getElementById("dayDetailList");
@@ -1095,6 +1090,7 @@ function renderDayDetail() {
 function renderMonthSummary() {
   let income = 0, expense = 0, investment = 0;
   state.calEntries.forEach(e => {
+    if (e.type === "asset") return; // 자산 내역은 별도 화면에서 관리
     if (e.type === "income") income += Number(e.amount);
     else if (e.type === "investment") investment += Number(e.amount);
     else expense += Number(e.amount);
@@ -1564,6 +1560,7 @@ function populateMonthSelectors(startElId, endElId, startStateKey, endStateKey) 
   endSel.value = state[endStateKey];
 }
 
+// 차트 화면 전용: 현재 가계부의 전체 월별 문서를 한 번에 불러와 집계한다.
 async function loadAssetMonthlyData() {
   const prefix = `${state.currentLedger}_`;
   try {
@@ -1575,96 +1572,83 @@ async function loadAssetMonthlyData() {
     const byMonth = {};
     snap.forEach(doc => {
       const monthKey = doc.id.slice(prefix.length);
-      const data = doc.data() || {};
-      const entries = data.entries || [];
-      let expense = 0, income = 0, investment = 0;
+      const entries = (doc.data() && doc.data().entries) || [];
+      let expense = 0, income = 0, investment = 0, assetSum = 0, assetCount = 0;
       entries.forEach(e => {
         if (e.type === "income") income += Number(e.amount);
         else if (e.type === "investment") investment += Number(e.amount);
+        else if (e.type === "asset") { assetSum += Number(e.amount); assetCount++; }
         else expense += Number(e.amount);
       });
-      const asset = (data.asset === undefined || data.asset === null) ? null : Number(data.asset);
-      byMonth[monthKey] = { monthKey, expense, income, investment, asset };
+      // 그 달에 자산 내역이 하나도 없으면 null로 표시해 차트에서 이전 값을 이어가도록(carry-forward) 한다.
+      byMonth[monthKey] = { monthKey, expense, income, investment, asset: assetCount > 0 ? assetSum : null };
     });
     state.assetsMonths = Object.values(byMonth).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
   } catch (err) {
     console.error("자산 데이터 로드 실패:", err);
     state.assetsMonths = [];
   }
-  populateMonthSelectors("assetsTableStartSelect", "assetsTableEndSelect", "tableStartMonth", "tableEndMonth");
   populateMonthSelectors("chartStartSelect", "chartEndSelect", "chartStartMonth", "chartEndMonth");
-  renderAssetsTable();
   renderChart();
 }
 
-/* ---------- 자산 입력 화면 (엑셀 스타일 표) ---------- */
-function renderAssetsTable() {
-  const tbody = document.getElementById("assetsTableBody");
-  if (!state.tableStartMonth || !state.tableEndMonth) { tbody.innerHTML = ""; return; }
+/* ---------- 자산 화면 (월별 자산 내역 목록) ---------- */
+function renderAssetsScreen() {
+  const d = state.assetsDate;
+  document.getElementById("assetsMonthLabel").textContent = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 
-  const byKey = {};
-  state.assetsMonths.forEach(m => { byKey[m.monthKey] = m; });
+  // 그 달 자산 내역의 합계를 표시한다. 정확한 계산 방식은 추후 다시 정할 예정.
+  const total = state.assetsCalEntries.reduce((sum, e) => sum + Number(e.amount), 0);
+  document.getElementById("assetsMonthTotal").textContent = `${fmtNum(total)}원`;
 
-  const keys = buildMonthRange(state.tableStartMonth, state.tableEndMonth).slice().reverse();
-  tbody.innerHTML = keys.map(key => {
-    const d = byKey[key] || { expense: 0, income: 0, investment: 0, asset: null };
+  const listEl = document.getElementById("assetsEntryList");
+  const entries = state.assetsCalEntries.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  if (entries.length === 0) {
+    listEl.innerHTML = `<div class="day-detail-empty">등록된 자산 내역이 없습니다.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = entries.map(e => {
+    const cat = (categoriesForLedger(state.currentLedger).asset || []).find(c => c.id === e.category);
+    const icon = cat ? cat.icon : "💰";
+    const name = cat ? cat.label : e.category;
+    const dayLabel = e.date ? `${Number(e.date.split("-")[2])}일` : "";
     return `
-      <tr data-month="${key}">
-        <td class="col-month">${monthLabelOf(key)}</td>
-        <td><input type="text" inputmode="numeric" class="asset-input mono" data-month="${key}" value="${d.asset != null ? fmtNum(d.asset) : ""}" placeholder="입력" /></td>
-        <td class="col-readonly expense mono">${fmtNum(d.expense)}</td>
-        <td class="col-readonly income mono">${fmtNum(d.income)}</td>
-        <td class="col-readonly investment mono">${fmtNum(d.investment)}</td>
-      </tr>`;
+      <div class="day-detail-row" data-id="${e.id}">
+        <span class="icon">${icon}</span>
+        <span class="name">${name}${e.memo ? ` <span class="entry-memo-inline">· ${escapeHtml(e.memo)}</span>` : ""} <span class="entry-memo-inline">· ${dayLabel}</span></span>
+        <span class="amt income">+${fmtNum(e.amount)}원</span>
+      </div>`;
   }).join("");
 
-  tbody.querySelectorAll(".asset-input").forEach(input => {
-    input.addEventListener("input", () => {
-      const digits = input.value.replace(/[^0-9]/g, "");
-      input.value = digits ? Number(digits).toLocaleString("ko-KR") : "";
-    });
-    input.addEventListener("blur", async () => {
-      const key = input.dataset.month;
-      const digits = input.value.replace(/[^0-9]/g, "");
-      const value = digits ? Number(digits) : null;
-
-      let entry = state.assetsMonths.find(m => m.monthKey === key);
-      if (!entry) {
-        entry = { monthKey: key, expense: 0, income: 0, investment: 0, asset: null };
-        state.assetsMonths.push(entry);
-        state.assetsMonths.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
-      }
-      if (entry.asset === value) return; // 변경 없으면 저장 생략
-      entry.asset = value;
-      try {
-        await saveManualAsset(state.currentLedger, key, value);
-        flashSync();
-      } catch (err) {
-        console.error("자산 저장 실패:", err);
-        alert("자산 저장에 실패했습니다.\n" + err.message);
-      }
+  listEl.querySelectorAll(".day-detail-row").forEach(row => {
+    row.addEventListener("click", () => {
+      const entry = entries.find(e => e.id === row.dataset.id);
+      if (entry) openEditModal(entry, state.currentLedger);
     });
   });
 }
 
-document.getElementById("assetsTableStartSelect").addEventListener("change", (e) => {
-  state.tableStartMonth = e.target.value;
-  if (state.tableStartMonth > state.tableEndMonth) {
-    state.tableEndMonth = state.tableStartMonth;
-    document.getElementById("assetsTableEndSelect").value = state.tableEndMonth;
-  }
-  renderAssetsTable();
+document.getElementById("assetsPrevMonth").addEventListener("click", () => {
+  state.assetsDate = new Date(state.assetsDate.getFullYear(), state.assetsDate.getMonth() - 1, 1);
+  state.assetsCalEntries = [];
+  renderAssetsScreen();
+  listenAssetsMonth(state.currentLedger, state.assetsDate);
+});
+document.getElementById("assetsNextMonth").addEventListener("click", () => {
+  state.assetsDate = new Date(state.assetsDate.getFullYear(), state.assetsDate.getMonth() + 1, 1);
+  state.assetsCalEntries = [];
+  renderAssetsScreen();
+  listenAssetsMonth(state.currentLedger, state.assetsDate);
+});
+document.getElementById("assetsAddBtn").addEventListener("click", () => {
+  const y = state.assetsDate.getFullYear();
+  const m = String(state.assetsDate.getMonth() + 1).padStart(2, "0");
+  openModal(`${y}-${m}-01`, { type: "asset", targetLedger: state.currentLedger });
 });
 
-document.getElementById("assetsTableEndSelect").addEventListener("change", (e) => {
-  state.tableEndMonth = e.target.value;
-  if (state.tableEndMonth < state.tableStartMonth) {
-    state.tableStartMonth = state.tableEndMonth;
-    document.getElementById("assetsTableStartSelect").value = state.tableStartMonth;
-  }
-  renderAssetsTable();
-});
-
+/* ---------- 차트 화면 ---------- */
 /* ---------- 차트 화면 ---------- */
 
 // y좌표가 그래프 위쪽 가장자리에 너무 가까우면 값 라벨을 점 아래로 내려서 잘리지 않게 한다.
@@ -1943,7 +1927,7 @@ function openModal(dateStr, preset) {
 
   document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === state.modalType));
 
-  sheetTitle.textContent = "내역 추가";
+  sheetTitle.textContent = state.modalType === "asset" ? "자산 추가" : "내역 추가";
   saveBtn.textContent = "저장";
   deleteEntryBtn.style.display = "none";
   duplicateEntryBtn.style.display = "none";
@@ -1971,7 +1955,7 @@ function openEditModal(entry, ledgerId) {
 
   document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === entry.type));
 
-  sheetTitle.textContent = "내역 수정";
+  sheetTitle.textContent = state.modalType === "asset" ? "자산 수정" : "내역 수정";
   saveBtn.textContent = "저장";
   deleteEntryBtn.style.display = "block";
   duplicateEntryBtn.style.display = "block";
@@ -1986,7 +1970,8 @@ function openEditModal(entry, ledgerId) {
 
 function updatePayerFieldVisibility() {
   const wrap = document.getElementById("payerFieldWrap");
-  if (state.modalTargetLedger === "shared") {
+  // 자산 내역은 "결제자" 개념이 없으므로 어느 가계부든 선택 UI를 숨긴다.
+  if (state.modalTargetLedger === "shared" && state.modalType !== "asset") {
     wrap.style.display = "block";
     document.querySelectorAll("#payerChips .chip").forEach(b => b.classList.toggle("active", b.dataset.payer === state.modalPayer));
   } else {
@@ -1998,14 +1983,19 @@ function updatePayerFieldVisibility() {
 
 // 지현/현제 가계부는 지출만 기록하므로, 추가 대상 가계부가 공용일 때만
 // 지출/수입/투자 타입 선택 UI 자체를 노출한다. 공용이 아닌 가계부로 바뀌면
-// 자동으로 지출로 고정한다.
+// 자동으로 지출로 고정한다. 자산 내역은 자산 화면 전용 입력이라 타입을
+// 바꿀 필요가 없으므로 세그먼트 자체를 항상 숨긴다.
 function updateTypeSegmentVisibility() {
   const segment = document.getElementById("typeSegment");
   const investBtn = document.getElementById("typeInvestmentBtn");
   const isShared = state.modalTargetLedger === "shared";
+  if (state.modalType === "asset") {
+    segment.style.display = "none";
+    return;
+  }
   segment.style.display = isShared ? "flex" : "none";
   investBtn.style.display = isShared ? "" : "none";
-  if (!isShared && state.modalType !== "expense") {
+  if (!isShared && (state.modalType === "income" || state.modalType === "investment")) {
     state.modalType = "expense";
     state.modalCategory = defaultCategoryFor(state.modalTargetLedger, state.modalType);
     document.querySelectorAll("#typeSegment button").forEach(b => b.classList.toggle("active", b.dataset.type === state.modalType));
@@ -2048,7 +2038,7 @@ document.getElementById("payerChips").addEventListener("click", (e) => {
 
 function renderTargetLedgerChips() {
   const wrap = document.getElementById("targetLedgerWrap");
-  wrap.style.display = state.modalTargetLedger === "shared" ? "block" : "none";
+  wrap.style.display = (state.modalTargetLedger === "shared" && state.modalType !== "asset") ? "block" : "none";
 
   const el = document.getElementById("targetLedgerChips");
   el.innerHTML = LEDGERS.map(l => `
@@ -2208,7 +2198,7 @@ function renderSearchResults() {
     const cat = (categoriesForLedger(state.currentLedger)[e.type] || []).find(c => c.id === e.category);
     const icon = cat ? cat.icon : "📦";
     const name = cat ? cat.label : e.category;
-    const sign = e.type === "income" ? "+" : "-";
+    const sign = (e.type === "income" || e.type === "asset") ? "+" : "-";
     const [y, m, d] = (e.date || "").split("-").map(Number);
     const dateLabel = m && d ? `<span class="${weekdayClass(new Date(y, m - 1, d).getDay())}">${m}/${d}</span>` : "";
     return `
@@ -2232,6 +2222,7 @@ updateDashTypeVisibility();
 renderMonthSummary();
 listenCalendarMonth(state.currentLedger, state.calDate);
 listenDashboardMonth(state.currentLedger, state.dashDate);
+listenAssetsMonth(state.currentLedger, state.assetsDate);
 </script>
 </body>
 </html>
