@@ -400,16 +400,22 @@
   }
   #memoInput::placeholder, #searchInput::placeholder{ color: var(--text-dim); }
 
-  .manage-cat-block{ padding: 10px 0; border-bottom:1px solid var(--border); }
+  .manage-cat-block{ padding: 10px 0; border-bottom:1px solid var(--border); background: var(--bg); }
   .manage-cat-block:last-of-type{ border-bottom:none; }
-  .manage-cat-header{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .manage-name{ font-weight:600; font-size:14px; color: var(--text); }
+  .manage-cat-header{ display:flex; align-items:center; gap:6px; }
+  .manage-name{ flex:1; min-width:0; font-weight:600; font-size:14px; color: var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .manage-items{ display:flex; flex-direction:column; gap:2px; padding-left:14px; margin-top:6px; }
-  .manage-item-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; font-size:13px; }
+  .manage-item-row{ display:flex; align-items:center; gap:6px; padding:6px 0; font-size:13px; background: var(--bg); }
+  .manage-item-row .manage-name{ font-weight:500; font-size:13px; }
   .manage-del-btn{
     border:none; background:none; color: var(--expense); font-family:inherit; font-size:12px;
     font-weight:700; cursor:pointer; padding:4px 8px; flex-shrink:0;
   }
+  .drag-handle{
+    cursor: grab; color: var(--text-dim); font-size:15px; line-height:1; padding:4px 4px;
+    touch-action: none; flex-shrink:0; user-select:none;
+  }
+  .manage-cat-block.dragging, .manage-item-row.dragging{ opacity:0.45; }
   .manage-add-btn{
     border:1px dashed var(--border); background:none; color: var(--accent); font-family:inherit;
     font-size:12px; font-weight:700; cursor:pointer; padding:6px 10px; border-radius:8px; margin-top:6px;
@@ -1826,7 +1832,8 @@ function renderAssetManageList() {
   const catBlocks = state.assetCategories.map(cat => {
     const items = itemsByCat[cat.id] || [];
     const itemRows = items.map(it => `
-      <div class="manage-item-row">
+      <div class="manage-item-row" data-item-id="${it.id}">
+        <span class="drag-handle" data-drag="item">⠿</span>
         <span class="manage-name">${escapeHtml(it.label)}</span>
         <button class="manage-del-btn" data-del-item="${it.id}">삭제</button>
       </div>`).join("");
@@ -1837,12 +1844,13 @@ function renderAssetManageList() {
       : `<button class="manage-add-btn" data-add-item="${cat.id}">+ 항목 추가</button>`;
 
     return `
-      <div class="manage-cat-block">
+      <div class="manage-cat-block" data-cat-id="${cat.id}">
         <div class="manage-cat-header">
+          <span class="drag-handle" data-drag="cat">⠿</span>
           <span class="manage-name">${escapeHtml(cat.label)}</span>
           <button class="manage-del-btn" data-del-cat="${cat.id}">삭제</button>
         </div>
-        <div class="manage-items">${itemRows}${itemAddRow}</div>
+        <div class="manage-items" data-cat-items="${cat.id}">${itemRows}${itemAddRow}</div>
       </div>`;
   }).join("");
 
@@ -1959,6 +1967,71 @@ document.getElementById("closeAssetManageSheet").addEventListener("click", close
 document.getElementById("assetManageOverlay").addEventListener("click", (e) => {
   if (e.target.id === "assetManageOverlay") closeAssetManageModal();
 });
+
+// 분류(⠿ 손잡이, #assetManageList의 직계 자식)와 항목(⠿ 손잡이, 각 분류의 .manage-items 안)을
+// 포인터로 드래그해서 순서를 바꾼다. 목록이 다시 그려져도(#assetManageList 자체는 그대로라)
+// 한 번만 등록해도 계속 동작한다.
+function initAssetManageDrag() {
+  const root = document.getElementById("assetManageList");
+  root.addEventListener("pointerdown", (e) => {
+    const handle = e.target.closest(".drag-handle");
+    if (!handle) return;
+    e.preventDefault();
+
+    const kind = handle.dataset.drag;
+    const dragging = kind === "cat" ? handle.closest(".manage-cat-block") : handle.closest(".manage-item-row");
+    if (!dragging) return;
+    const containerEl = dragging.parentElement;
+    const itemSelector = kind === "cat" ? ".manage-cat-block" : ".manage-item-row";
+
+    dragging.classList.add("dragging");
+    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* 일부 브라우저에서 실패해도 무시 */ }
+
+    function onMove(ev) {
+      const siblings = Array.from(containerEl.children).filter(el => el.matches(itemSelector) && el !== dragging);
+      for (const el of siblings) {
+        const rect = el.getBoundingClientRect();
+        if (ev.clientY >= rect.top && ev.clientY <= rect.bottom) {
+          if (ev.clientY < rect.top + rect.height / 2) containerEl.insertBefore(dragging, el);
+          else containerEl.insertBefore(dragging, el.nextSibling);
+          break;
+        }
+      }
+    }
+
+    function onUp() {
+      dragging.classList.remove("dragging");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+
+      if (kind === "cat") {
+        const newOrder = Array.from(root.children)
+          .filter(el => el.matches(".manage-cat-block"))
+          .map(el => el.dataset.catId);
+        state.assetCategories.sort((a, b) => newOrder.indexOf(a.id) - newOrder.indexOf(b.id));
+      } else {
+        const catId = containerEl.dataset.catItems;
+        const newOrderIds = Array.from(containerEl.children)
+          .filter(el => el.matches(".manage-item-row"))
+          .map(el => el.dataset.itemId);
+        const others = state.assetItems.filter(it => it.categoryId !== catId);
+        const reordered = newOrderIds.map(id => state.assetItems.find(it => it.id === id)).filter(Boolean);
+        state.assetItems = others.concat(reordered);
+      }
+
+      saveAssetStructure().catch(err => {
+        console.error("순서 저장 실패:", err);
+        alert("순서 저장에 실패했습니다.\n" + err.message);
+      });
+      renderAssetManageList();
+      renderAssetsScreen();
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+initAssetManageDrag();
 
 /* ---------- 차트 화면 ---------- */
 
