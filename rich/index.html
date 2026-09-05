@@ -1047,6 +1047,8 @@ document.querySelectorAll(".tabbtn[data-screen]").forEach(btn => {
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById("screen-" + btn.dataset.screen).classList.add("active");
     if (btn.dataset.screen === "chart") loadAssetMonthlyData();
+    // 대시보드는 숨겨져 있는 동안 그려졌을 수 있어(% 라벨 실측이 부정확) 보일 때 다시 그린다.
+    if (btn.dataset.screen === "dashboard") renderDashboard();
   });
 });
 
@@ -1403,6 +1405,7 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
   let angle = 0;
   let segParts = "";
   const calloutItems = []; // { mid, icon } — 각도 오름차순으로 쌓인다
+  const pctCandidates = []; // { x, y, text, color, sweep, share } — 실측 후 겹치거나 넘치면 걸러낸다
 
   catsWithAmount.forEach((c, i) => {
     const share = totals[c.id] / denom;
@@ -1414,11 +1417,9 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
 
     segParts += `<path d="${donutSegmentPath(CX, CY, R_OUT, R_IN, start, end)}" fill="${segmentShade(type, i, catsWithAmount.length)}" />`;
 
-    if (sweep >= 10) {
-      const pctPoint = polarPoint(CX, CY, (R_OUT + R_IN) / 2, mid);
-      const textColor = segmentLightness(i, catsWithAmount.length) > 68 ? "var(--text)" : "#FFFFFF";
-      segParts += `<text x="${pctPoint.x.toFixed(2)}" y="${pctPoint.y.toFixed(2)}" font-size="10" font-weight="600" fill="${textColor}" text-anchor="middle" dominant-baseline="central">${Math.round(share * 100)}%</text>`;
-    }
+    const pctPoint = polarPoint(CX, CY, (R_OUT + R_IN) / 2, mid);
+    const textColor = segmentLightness(i, catsWithAmount.length) > 68 ? "var(--text)" : "#FFFFFF";
+    pctCandidates.push({ x: pctPoint.x, y: pctPoint.y, text: `${Math.round(share * 100)}%`, color: textColor, sweep, share });
 
     if (share > threshold) calloutItems.push({ trueMid: mid, mid, icon: c.icon });
   });
@@ -1426,10 +1427,8 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
   if (hasRemaining) {
     const sweep = remainingShare * 360;
     segParts += `<path d="${donutSegmentPath(CX, CY, R_OUT, R_IN, angle, angle + sweep)}" fill="var(--income-soft)" />`;
-    if (sweep >= 10) {
-      const pctPoint = polarPoint(CX, CY, (R_OUT + R_IN) / 2, angle + sweep / 2);
-      segParts += `<text x="${pctPoint.x.toFixed(2)}" y="${pctPoint.y.toFixed(2)}" font-size="10" font-weight="600" fill="var(--text)" text-anchor="middle" dominant-baseline="central">${Math.round(remainingShare * 100)}%</text>`;
-    }
+    const pctPoint = polarPoint(CX, CY, (R_OUT + R_IN) / 2, angle + sweep / 2);
+    pctCandidates.push({ x: pctPoint.x, y: pctPoint.y, text: `${Math.round(remainingShare * 100)}%`, color: "var(--text)", sweep, share: remainingShare });
     angle += sweep;
   }
 
@@ -1496,6 +1495,68 @@ function renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, type, 
 
   svg.innerHTML = segParts + lineParts;
   calloutsEl.innerHTML = callouts;
+  renderFittingPercentLabels(svg, pctCandidates, R_OUT, R_IN);
+}
+
+// 세그먼트를 실제로 그린 뒤 % 라벨을 하나씩 추가해보고 실측한다.
+// 자기 조각 폭을 벗어나거나 이미 표시된 라벨과 겹치면 아예 표시하지 않는다.
+// (큰 조각부터 먼저 배치해서, 자리가 부족하면 작은 조각 라벨이 양보한다.)
+function renderFittingPercentLabels(svg, candidates, R_OUT, R_IN) {
+  const radiusMid = (R_OUT + R_IN) / 2;
+  const ringHeight = R_OUT - R_IN;
+  const svgNS = "http://www.w3.org/2000/svg";
+
+  // 다른 탭을 보고 있는 등 실제로 화면에 그려지지 않은 상태에서는 getBBox 실측이
+  // 부정확하거나 예외를 던질 수 있으므로, 이때는 각도 기준의 단순 규칙으로 대체한다.
+  // (해당 탭으로 돌아오면 renderDashboard()가 다시 호출되어 정확히 재측정된다.)
+  const isVisible = svg.getClientRects().length > 0;
+
+  const accepted = [];
+  candidates.slice().sort((a, b) => b.share - a.share).forEach(cand => {
+    if (!isVisible) {
+      if (cand.sweep >= 10) {
+        const fallbackEl = document.createElementNS(svgNS, "text");
+        fallbackEl.setAttribute("x", cand.x.toFixed(2));
+        fallbackEl.setAttribute("y", cand.y.toFixed(2));
+        fallbackEl.setAttribute("font-size", "10");
+        fallbackEl.setAttribute("font-weight", "600");
+        fallbackEl.setAttribute("fill", cand.color);
+        fallbackEl.setAttribute("text-anchor", "middle");
+        fallbackEl.setAttribute("dominant-baseline", "central");
+        fallbackEl.textContent = cand.text;
+        svg.appendChild(fallbackEl);
+      }
+      return;
+    }
+
+    const chordWidth = 2 * radiusMid * Math.sin((cand.sweep * Math.PI / 180) / 2);
+
+    const textEl = document.createElementNS(svgNS, "text");
+    textEl.setAttribute("x", cand.x.toFixed(2));
+    textEl.setAttribute("y", cand.y.toFixed(2));
+    textEl.setAttribute("font-size", "10");
+    textEl.setAttribute("font-weight", "600");
+    textEl.setAttribute("fill", cand.color);
+    textEl.setAttribute("text-anchor", "middle");
+    textEl.setAttribute("dominant-baseline", "central");
+    textEl.textContent = cand.text;
+    svg.appendChild(textEl);
+
+    let bbox = null;
+    try { bbox = textEl.getBBox(); } catch (err) { /* 측정 실패 시 표시하지 않음 */ }
+
+    const fits = !!bbox && bbox.width <= chordWidth * 0.94 && bbox.height <= ringHeight * 0.92;
+    const overlaps = !!bbox && accepted.some(r =>
+      bbox.x < r.x + r.width && bbox.x + bbox.width > r.x &&
+      bbox.y < r.y + r.height && bbox.y + bbox.height > r.y
+    );
+
+    if (!fits || overlaps) {
+      svg.removeChild(textEl);
+    } else {
+      accepted.push(bbox);
+    }
+  });
 }
 
 function renderDashboard() {
