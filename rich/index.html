@@ -330,6 +330,18 @@
   .cat-entry-row .amt.income{ color: var(--income); }
   .cat-entry-row .amt.investment{ color: var(--invest); }
 
+  .value-cell{ display:inline-flex; align-items:center; flex-shrink:0; }
+  .cell-display{
+    cursor:pointer; font-weight:600; font-size:13px; color: var(--text);
+    padding: 4px 8px; border-radius:8px;
+  }
+  .cell-display:hover{ background: var(--accent-soft); }
+  .cell-input{
+    width:100px; padding: 5px 8px; border-radius:8px; border:1px solid var(--accent);
+    background: var(--card); font-family: inherit; font-size:13px; color: var(--text);
+    text-align:right; outline:none;
+  }
+
   /* ---------- Modal ---------- */
   .overlay{
     position: fixed; inset:0; background: rgba(31,46,42,0.4);
@@ -381,12 +393,12 @@
   }
   .chip.active{ background: var(--accent); color:#fff; border-color: var(--accent); }
 
-  input[type="date"], #memoInput, #searchInput{
+  input[type="date"], #memoInput, #searchInput, #newAssetCategoryInput, #newAssetItemInput{
     width:100%; padding: 11px 13px; border-radius:12px; border:1px solid var(--border);
     background: var(--card); font-family: inherit; font-size:14px; color: var(--text);
     outline: none;
   }
-  #memoInput::placeholder, #searchInput::placeholder{ color: var(--text-dim); }
+  #memoInput::placeholder, #searchInput::placeholder, #newAssetCategoryInput::placeholder, #newAssetItemInput::placeholder{ color: var(--text-dim); }
 
   /* ---------- Search sheet ---------- */
   .search-results{ margin-top:16px; display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; }
@@ -649,6 +661,28 @@
   </div>
 </div>
 
+<!-- 자산 분류/세부항목 추가 -->
+<div class="overlay" id="assetItemOverlay">
+  <div class="sheet">
+    <div class="sheet-header">
+      <button class="close-btn" id="closeAssetItemSheet">✕</button>
+      <div class="sheet-handle"></div>
+      <h3>자산 항목 추가</h3>
+    </div>
+    <div class="sheet-body">
+      <div class="field-label">분류</div>
+      <div class="chip-row" id="assetCategoryChips"></div>
+      <input type="text" id="newAssetCategoryInput" placeholder="새 분류명 입력 (예: 국내주식)" autocomplete="off" style="margin-top:8px;" />
+
+      <div class="field-label">세부항목명</div>
+      <input type="text" id="newAssetItemInput" placeholder="예: 현제 토스" autocomplete="off" />
+    </div>
+    <div class="sheet-footer">
+      <button class="save-btn" id="saveAssetItemBtn" disabled>저장</button>
+    </div>
+  </div>
+</div>
+
 <div class="sync-badge" id="syncBadge">동기화됨</div>
 
 <script>
@@ -665,6 +699,9 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const COLLECTION = "ledger_v1"; // 문서: {ledgerId}_{YYYY-MM} (예: jihyeon_2026-08)
+const ASSET_COLLECTION = "asset_v1"; // 자산 분류/세부항목 구조 및 월별 금액 저장
+// 문서: {ledgerId}_structure → { categories: [{id,label}], items: [{id,categoryId,label}] }
+//       {ledgerId}_{YYYY-MM} → { values: { [itemId]: amount } }
 
 /* ====================== 상수 정의 ====================== */
 const LEDGERS = [
@@ -807,8 +844,13 @@ const state = {
   calUnsub: null,
   dashUnsub: null,
   assetsDate: new Date(), // 자산 화면에서 보고 있는 월
-  assetsCalEntries: [],   // 그 달의 자산(type: "asset") 내역
-  assetsUnsub: null,
+  assetCategories: [], // [{ id, label }] 자산 분류 (구조, 월과 무관)
+  assetItems: [],       // [{ id, categoryId, label }] 자산 세부항목 (구조, 월과 무관)
+  assetExpandedCats: new Set(), // 자산 화면에서 펼쳐진 분류 id 목록
+  assetMonthValues: {}, // { [itemId]: amount } 현재 보고 있는 월의 세부항목별 최신 금액
+  assetStructureUnsub: null,
+  assetValuesUnsub: null,
+  assetItemModal: { categoryId: null, newCategoryName: "", itemName: "" },
   assetsMonths: [],  // [{ monthKey, expense, income, investment, asset }] 오름차순, 현재 가계부의 월별 데이터 (전체 기간, 차트용)
   chartMetric: "all", // 차트 화면 하단 토글 ("all" | "balance" | "expense" | "income" | "investment")
   chartStartMonth: null, // 차트 화면 표시 범위 시작 "YYYY-MM"
@@ -856,18 +898,45 @@ function listenDashboardMonth(ledgerId, dateObj) {
   });
 }
 
-function listenAssetsMonth(ledgerId, dateObj) {
-  if (state.assetsUnsub) state.assetsUnsub();
-  const docId = monthDocId(ledgerId, monthKeyOf(dateObj));
-  state.assetsUnsub = db.collection(COLLECTION).doc(docId).onSnapshot((snap) => {
+function assetStructureDocId(ledgerId) {
+  return `${ledgerId}_structure`;
+}
+
+function listenAssetStructure(ledgerId) {
+  if (state.assetStructureUnsub) state.assetStructureUnsub();
+  state.assetStructureUnsub = db.collection(ASSET_COLLECTION).doc(assetStructureDocId(ledgerId)).onSnapshot((snap) => {
     const data = snap.data();
-    const entries = (data && data.entries) ? data.entries.slice() : [];
-    state.assetsCalEntries = entries.filter(e => e.type === "asset");
+    state.assetCategories = (data && data.categories) || [];
+    state.assetItems = (data && data.items) || [];
+    renderAssetsScreen();
+  }, (err) => {
+    console.error("Firestore listen error (asset structure):", err);
+  });
+}
+
+function listenAssetMonthValues(ledgerId, dateObj) {
+  if (state.assetValuesUnsub) state.assetValuesUnsub();
+  const docId = monthDocId(ledgerId, monthKeyOf(dateObj));
+  state.assetValuesUnsub = db.collection(ASSET_COLLECTION).doc(docId).onSnapshot((snap) => {
+    const data = snap.data();
+    state.assetMonthValues = (data && data.values) || {};
     renderAssetsScreen();
     flashSync();
   }, (err) => {
-    console.error("Firestore listen error (assets):", err);
+    console.error("Firestore listen error (asset values):", err);
   });
+}
+
+async function saveAssetStructure() {
+  await db.collection(ASSET_COLLECTION).doc(assetStructureDocId(state.currentLedger)).set({
+    categories: state.assetCategories,
+    items: state.assetItems,
+  });
+}
+
+async function saveAssetValue(ledgerId, monthKey, itemId, value) {
+  const docId = monthDocId(ledgerId, monthKey);
+  await db.collection(ASSET_COLLECTION).doc(docId).set({ values: { [itemId]: value } }, { merge: true });
 }
 
 function flashSync() {
@@ -899,7 +968,10 @@ function switchLedger(id) {
   state.dashExpandedCats = new Set();
   state.calEntries = [];
   state.dashEntries = [];
-  state.assetsCalEntries = [];
+  state.assetCategories = [];
+  state.assetItems = [];
+  state.assetMonthValues = {};
+  state.assetExpandedCats = new Set();
   // 가계부가 바뀌면 다음 로드 시 그 가계부 기준으로 기본 범위를 재계산한다.
   state.chartStartMonth = null;
   state.chartEndMonth = null;
@@ -920,7 +992,8 @@ function switchLedger(id) {
   listenCalendarMonth(id, state.calDate);
   listenDashboardMonth(id, state.dashDate);
   renderAssetsScreen();
-  listenAssetsMonth(id, state.assetsDate);
+  listenAssetStructure(id);
+  listenAssetMonthValues(id, state.assetsDate);
   const activeScreenId = document.querySelector(".screen.active").id;
   if (activeScreenId === "screen-chart") loadAssetMonthlyData();
 }
@@ -1563,89 +1636,244 @@ function populateMonthSelectors(startElId, endElId, startStateKey, endStateKey) 
 // 차트 화면 전용: 현재 가계부의 전체 월별 문서를 한 번에 불러와 집계한다.
 async function loadAssetMonthlyData() {
   const prefix = `${state.currentLedger}_`;
+  const byMonth = {};
   try {
     const snap = await db.collection(COLLECTION)
       .where(firebase.firestore.FieldPath.documentId(), ">=", prefix)
       .where(firebase.firestore.FieldPath.documentId(), "<", prefix + "")
       .get();
 
-    const byMonth = {};
     snap.forEach(doc => {
       const monthKey = doc.id.slice(prefix.length);
       const entries = (doc.data() && doc.data().entries) || [];
-      let expense = 0, income = 0, investment = 0, assetSum = 0, assetCount = 0;
+      let expense = 0, income = 0, investment = 0;
       entries.forEach(e => {
         if (e.type === "income") income += Number(e.amount);
         else if (e.type === "investment") investment += Number(e.amount);
-        else if (e.type === "asset") { assetSum += Number(e.amount); assetCount++; }
         else expense += Number(e.amount);
       });
-      // 그 달에 자산 내역이 하나도 없으면 null로 표시해 차트에서 이전 값을 이어가도록(carry-forward) 한다.
-      byMonth[monthKey] = { monthKey, expense, income, investment, asset: assetCount > 0 ? assetSum : null };
+      byMonth[monthKey] = { monthKey, expense, income, investment, asset: null };
     });
-    state.assetsMonths = Object.values(byMonth).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
+  } catch (err) {
+    console.error("가계부 데이터 로드 실패:", err);
+  }
+
+  // 자산(잔고)은 asset_v1의 월별 세부항목 금액 합계에서 가져온다.
+  // "{ledgerId}_structure" 문서는 월 데이터가 아니므로 걸러낸다.
+  try {
+    const snap = await db.collection(ASSET_COLLECTION)
+      .where(firebase.firestore.FieldPath.documentId(), ">=", prefix)
+      .where(firebase.firestore.FieldPath.documentId(), "<", prefix + "")
+      .get();
+
+    snap.forEach(doc => {
+      const monthKey = doc.id.slice(prefix.length);
+      if (!/^\d{4}-\d{2}$/.test(monthKey)) return; // structure 문서 제외
+      const values = (doc.data() && doc.data().values) || {};
+      const amounts = Object.values(values).filter(v => v != null);
+      if (amounts.length === 0) return; // 값을 하나도 입력하지 않은 달은 null로 두어 이전 값을 이어간다(carry-forward)
+      const assetSum = amounts.reduce((sum, v) => sum + Number(v), 0);
+      if (!byMonth[monthKey]) byMonth[monthKey] = { monthKey, expense: 0, income: 0, investment: 0, asset: null };
+      byMonth[monthKey].asset = assetSum;
+    });
   } catch (err) {
     console.error("자산 데이터 로드 실패:", err);
-    state.assetsMonths = [];
   }
+
+  state.assetsMonths = Object.values(byMonth).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
   populateMonthSelectors("chartStartSelect", "chartEndSelect", "chartStartMonth", "chartEndMonth");
   renderChart();
 }
 
 /* ---------- 자산 화면 (월별 자산 내역 목록) ---------- */
+// 분류(카테고리)는 토글로 접고 펼치고, 세부항목은 그 안에 들여쓴 행으로 표시한다.
+// 각 세부항목의 금액 칸은 클릭하면 입력창으로 바뀌는 엑셀 스타일 셀이다.
 function renderAssetsScreen() {
   const d = state.assetsDate;
   document.getElementById("assetsMonthLabel").textContent = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 
-  // 그 달 자산 내역의 합계를 표시한다. 정확한 계산 방식은 추후 다시 정할 예정.
-  const total = state.assetsCalEntries.reduce((sum, e) => sum + Number(e.amount), 0);
+  let total = 0;
+  Object.values(state.assetMonthValues).forEach(v => { total += Number(v) || 0; });
   document.getElementById("assetsMonthTotal").textContent = `${fmtNum(total)}원`;
 
   const listEl = document.getElementById("assetsEntryList");
-  const entries = state.assetsCalEntries.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-  if (entries.length === 0) {
-    listEl.innerHTML = `<div class="day-detail-empty">등록된 자산 내역이 없습니다.</div>`;
+  if (state.assetCategories.length === 0) {
+    listEl.innerHTML = `<div class="day-detail-empty">등록된 자산 분류가 없습니다. + 버튼으로 추가해보세요.</div>`;
     return;
   }
 
-  listEl.innerHTML = entries.map(e => {
-    const cat = (categoriesForLedger(state.currentLedger).asset || []).find(c => c.id === e.category);
-    const icon = cat ? cat.icon : "💰";
-    const name = cat ? cat.label : e.category;
-    const dayLabel = e.date ? `${Number(e.date.split("-")[2])}일` : "";
+  const itemsByCat = {};
+  state.assetItems.forEach(it => { (itemsByCat[it.categoryId] = itemsByCat[it.categoryId] || []).push(it); });
+
+  listEl.innerHTML = state.assetCategories.map(cat => {
+    const items = itemsByCat[cat.id] || [];
+    const catTotal = items.reduce((sum, it) => sum + (Number(state.assetMonthValues[it.id]) || 0), 0);
+    const expanded = state.assetExpandedCats.has(cat.id);
+
+    const itemsHtml = items.map(it => {
+      const val = state.assetMonthValues[it.id];
+      const displayText = val != null ? fmtNum(val) : "-";
+      return `
+        <div class="cat-entry-row">
+          <span class="entry-memo">${escapeHtml(it.label)}</span>
+          <span class="value-cell" data-item="${it.id}">
+            <span class="cell-display mono">${displayText}</span>
+            <input type="text" inputmode="numeric" class="cell-input mono" data-item="${it.id}" value="${val != null ? fmtNum(val) : ""}" style="display:none;" autocomplete="off" />
+          </span>
+        </div>`;
+    }).join("");
+
     return `
-      <div class="day-detail-row" data-id="${e.id}">
-        <span class="icon">${icon}</span>
-        <span class="name">${name}${e.memo ? ` <span class="entry-memo-inline">· ${escapeHtml(e.memo)}</span>` : ""} <span class="entry-memo-inline">· ${dayLabel}</span></span>
-        <span class="amt income">+${fmtNum(e.amount)}원</span>
+      <div class="cat-row-wrap">
+        <button class="cat-row" data-cat="${cat.id}">
+          <span class="name">${escapeHtml(cat.label)}</span>
+          <span class="amt income">${fmtNum(catTotal)}원</span>
+          <span class="chevron">${expanded ? "▲" : "▼"}</span>
+        </button>
+        ${expanded ? `<div class="cat-entries">${itemsHtml}</div>` : ""}
       </div>`;
   }).join("");
 
-  listEl.querySelectorAll(".day-detail-row").forEach(row => {
-    row.addEventListener("click", () => {
-      const entry = entries.find(e => e.id === row.dataset.id);
-      if (entry) openEditModal(entry, state.currentLedger);
+  listEl.querySelectorAll(".cat-row[data-cat]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.cat;
+      if (state.assetExpandedCats.has(id)) state.assetExpandedCats.delete(id);
+      else state.assetExpandedCats.add(id);
+      renderAssetsScreen();
+    });
+  });
+
+  listEl.querySelectorAll(".cell-display").forEach(span => {
+    span.addEventListener("click", () => {
+      const cell = span.closest(".value-cell");
+      const input = cell.querySelector(".cell-input");
+      span.style.display = "none";
+      input.style.display = "inline-block";
+      input.focus();
+      input.select();
+    });
+  });
+
+  listEl.querySelectorAll(".cell-input").forEach(input => {
+    input.addEventListener("input", () => {
+      const digits = input.value.replace(/[^0-9]/g, "");
+      input.value = digits ? Number(digits).toLocaleString("ko-KR") : "";
+    });
+    input.addEventListener("blur", async () => {
+      const itemId = input.dataset.item;
+      const digits = input.value.replace(/[^0-9]/g, "");
+      const value = digits ? Number(digits) : null;
+      const prev = state.assetMonthValues[itemId] != null ? state.assetMonthValues[itemId] : null;
+      if (prev === value) {
+        input.style.display = "none";
+        input.previousElementSibling.style.display = "inline";
+        return;
+      }
+      state.assetMonthValues[itemId] = value;
+      renderAssetsScreen();
+      try {
+        await saveAssetValue(state.currentLedger, monthKeyOf(state.assetsDate), itemId, value);
+        flashSync();
+      } catch (err) {
+        console.error("자산 값 저장 실패:", err);
+        alert("저장에 실패했습니다.\n" + err.message);
+      }
     });
   });
 }
 
 document.getElementById("assetsPrevMonth").addEventListener("click", () => {
   state.assetsDate = new Date(state.assetsDate.getFullYear(), state.assetsDate.getMonth() - 1, 1);
-  state.assetsCalEntries = [];
+  state.assetMonthValues = {};
   renderAssetsScreen();
-  listenAssetsMonth(state.currentLedger, state.assetsDate);
+  listenAssetMonthValues(state.currentLedger, state.assetsDate);
 });
 document.getElementById("assetsNextMonth").addEventListener("click", () => {
   state.assetsDate = new Date(state.assetsDate.getFullYear(), state.assetsDate.getMonth() + 1, 1);
-  state.assetsCalEntries = [];
+  state.assetMonthValues = {};
   renderAssetsScreen();
-  listenAssetsMonth(state.currentLedger, state.assetsDate);
+  listenAssetMonthValues(state.currentLedger, state.assetsDate);
 });
-document.getElementById("assetsAddBtn").addEventListener("click", () => {
-  const y = state.assetsDate.getFullYear();
-  const m = String(state.assetsDate.getMonth() + 1).padStart(2, "0");
-  openModal(`${y}-${m}-01`, { type: "asset", targetLedger: state.currentLedger });
+document.getElementById("assetsAddBtn").addEventListener("click", openAssetItemModal);
+
+/* ---------- 자산 분류/세부항목 추가 모달 ---------- */
+function renderAssetCategoryChips() {
+  const wrap = document.getElementById("assetCategoryChips");
+  const existingChips = state.assetCategories.map(c => `
+    <button class="chip ${state.assetItemModal.categoryId === c.id ? "active" : ""}" data-cat="${c.id}">${escapeHtml(c.label)}</button>
+  `).join("");
+  const newChip = `<button class="chip ${state.assetItemModal.categoryId === null ? "active" : ""}" data-cat="__new__">+ 새 분류</button>`;
+  wrap.innerHTML = existingChips + newChip;
+
+  wrap.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const catId = chip.dataset.cat;
+      state.assetItemModal.categoryId = catId === "__new__" ? null : catId;
+      renderAssetCategoryChips();
+      document.getElementById("newAssetCategoryInput").style.display = state.assetItemModal.categoryId === null ? "block" : "none";
+      updateAssetItemSaveEnabled();
+    });
+  });
+}
+
+function updateAssetItemSaveEnabled() {
+  const hasCategory = !!(state.assetItemModal.categoryId || state.assetItemModal.newCategoryName.trim());
+  const hasItemName = !!state.assetItemModal.itemName.trim();
+  document.getElementById("saveAssetItemBtn").disabled = !(hasCategory && hasItemName);
+}
+
+function openAssetItemModal() {
+  state.assetItemModal = { categoryId: null, newCategoryName: "", itemName: "" };
+  const newCatInput = document.getElementById("newAssetCategoryInput");
+  newCatInput.value = "";
+  newCatInput.style.display = "block";
+  document.getElementById("newAssetItemInput").value = "";
+  renderAssetCategoryChips();
+  updateAssetItemSaveEnabled();
+  document.getElementById("assetItemOverlay").classList.add("show");
+}
+
+function closeAssetItemModal() {
+  document.getElementById("assetItemOverlay").classList.remove("show");
+}
+
+document.getElementById("closeAssetItemSheet").addEventListener("click", closeAssetItemModal);
+document.getElementById("assetItemOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "assetItemOverlay") closeAssetItemModal();
+});
+
+document.getElementById("newAssetCategoryInput").addEventListener("input", (e) => {
+  state.assetItemModal.newCategoryName = e.target.value;
+  updateAssetItemSaveEnabled();
+});
+document.getElementById("newAssetItemInput").addEventListener("input", (e) => {
+  state.assetItemModal.itemName = e.target.value;
+  updateAssetItemSaveEnabled();
+});
+
+document.getElementById("saveAssetItemBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("saveAssetItemBtn");
+  btn.disabled = true;
+  btn.textContent = "저장 중...";
+  try {
+    let categoryId = state.assetItemModal.categoryId;
+    if (!categoryId) {
+      categoryId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+      state.assetCategories.push({ id: categoryId, label: state.assetItemModal.newCategoryName.trim() });
+    }
+    const itemId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+    state.assetItems.push({ id: itemId, categoryId, label: state.assetItemModal.itemName.trim() });
+    state.assetExpandedCats.add(categoryId); // 추가한 분류는 바로 펼쳐서 보여준다
+    await saveAssetStructure();
+    renderAssetsScreen();
+    closeAssetItemModal();
+  } catch (err) {
+    console.error("자산 항목 저장 실패:", err);
+    alert("저장에 실패했습니다.\n" + err.message);
+  } finally {
+    btn.textContent = "저장";
+    updateAssetItemSaveEnabled();
+  }
 });
 
 /* ---------- 차트 화면 ---------- */
@@ -2222,7 +2450,8 @@ updateDashTypeVisibility();
 renderMonthSummary();
 listenCalendarMonth(state.currentLedger, state.calDate);
 listenDashboardMonth(state.currentLedger, state.dashDate);
-listenAssetsMonth(state.currentLedger, state.assetsDate);
+listenAssetStructure(state.currentLedger);
+listenAssetMonthValues(state.currentLedger, state.assetsDate);
 </script>
 </body>
 </html>
