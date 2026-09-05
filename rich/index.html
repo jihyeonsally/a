@@ -2527,7 +2527,7 @@ function renderChart() {
   listEl.innerHTML = months.slice().reverse().map(m => {
     let sign, amt, cls;
     if (metric === "all" || metric === "balance") {
-      sign = m.balance < 0 ? "-" : "+";
+      sign = m.balance < 0 ? "-" : "";
       amt = Math.abs(m.balance);
       cls = m.balance < 0 ? "expense" : "income";
     } else if (metric === "expense") {
@@ -2535,19 +2535,19 @@ function renderChart() {
     } else if (metric === "income") {
       sign = "+"; amt = m.income; cls = "income";
     } else {
-      sign = "+"; amt = m.investment; cls = "investment";
+      sign = "₩"; amt = m.investment; cls = "investment";
     }
     const expanded = state.chartExpandedMonths.has(m.monthKey);
     let breakdownHtml = "";
     if (expanded) {
       if (metric === "all") {
-        const balSign = m.balance < 0 ? "-" : "+";
+        const balSign = m.balance < 0 ? "-" : "";
         breakdownHtml = `
           <div class="cat-entries">
             <div class="cat-entry-row"><span class="entry-memo">자산</span><span class="amt ${m.balance < 0 ? "expense" : "income"}">${balSign}${fmtNum(Math.abs(m.balance))}원</span></div>
             <div class="cat-entry-row"><span class="entry-memo">지출</span><span class="amt expense">-${fmtNum(m.expense)}원</span></div>
             <div class="cat-entry-row"><span class="entry-memo">수입</span><span class="amt income">+${fmtNum(m.income)}원</span></div>
-            <div class="cat-entry-row"><span class="entry-memo">투자</span><span class="amt investment">+${fmtNum(m.investment)}원</span></div>
+            <div class="cat-entry-row"><span class="entry-memo">투자</span><span class="amt investment">₩${fmtNum(m.investment)}원</span></div>
           </div>`;
       } else if (metric === "balance") {
         // 자산 분류별 금액만 표시 (분류 하위 항목은 표시하지 않는다)
@@ -2562,7 +2562,7 @@ function renderChart() {
         // 지출/수입/투자: 카테고리별 금액만 표시 (카테고리 내 개별 내역은 표시하지 않는다)
         const catDefs = categoriesForLedger(state.currentLedger)[metric] || [];
         const byCat = m[`${metric}ByCat`] || {};
-        const rowSign = metric === "expense" ? "-" : "+";
+        const rowSign = metric === "expense" ? "-" : (metric === "investment" ? "₩" : "+");
         const rows = Object.keys(byCat)
           .map(catId => {
             const def = catDefs.find(c => c.id === catId);
