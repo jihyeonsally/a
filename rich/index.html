@@ -322,6 +322,7 @@
   .cat-row .amt.expense{ color: var(--expense); }
   .cat-row .amt.income{ color: var(--income); }
   .cat-row .amt.investment{ color: var(--invest); }
+  .cat-row .amt.neutral{ color: var(--text); }
   .cat-row .chevron{ font-size:10px; color: var(--text-dim); flex-shrink:0; }
 
   .cat-entries{ border-top:1px solid var(--border); padding: 4px 14px 8px; }
@@ -336,6 +337,7 @@
   .cat-entry-row .amt.expense{ color: var(--expense); }
   .cat-entry-row .amt.income{ color: var(--income); }
   .cat-entry-row .amt.investment{ color: var(--invest); }
+  .cat-entry-row .amt.neutral{ color: var(--text); }
   .owner-tag{
     flex-shrink:0; font-size:11px; font-weight:700; padding:2px 6px; border-radius:6px;
   }
@@ -1910,7 +1912,7 @@ function renderAssetsScreen() {
         <button class="cat-row" data-cat="${cat.id}">
           <span class="icon">${cat.icon || DEFAULT_ASSET_ICON}</span>
           <span class="name">${escapeHtml(cat.label)}</span>
-          <span class="amt income">${fmtNum(catTotal)}원</span>
+          <span class="amt neutral">${fmtNum(catTotal)}원</span>
           <span class="chevron">${expanded ? "▲" : "▼"}</span>
         </button>
         ${expanded ? `<div class="cat-entries">${itemsHtml}</div>` : ""}
@@ -2529,7 +2531,7 @@ function renderChart() {
     if (metric === "all" || metric === "balance") {
       sign = m.balance < 0 ? "-" : "";
       amt = Math.abs(m.balance);
-      cls = m.balance < 0 ? "expense" : "income";
+      cls = m.balance < 0 ? "expense" : "neutral";
     } else if (metric === "expense") {
       sign = "-"; amt = m.expense; cls = "expense";
     } else if (metric === "income") {
@@ -2544,7 +2546,7 @@ function renderChart() {
         const balSign = m.balance < 0 ? "-" : "";
         breakdownHtml = `
           <div class="cat-entries">
-            <div class="cat-entry-row"><span class="entry-memo">자산</span><span class="amt ${m.balance < 0 ? "expense" : "income"}">${balSign}${fmtNum(Math.abs(m.balance))}원</span></div>
+            <div class="cat-entry-row"><span class="entry-memo">자산</span><span class="amt ${m.balance < 0 ? "expense" : "neutral"}">${balSign}${fmtNum(Math.abs(m.balance))}원</span></div>
             <div class="cat-entry-row"><span class="entry-memo">지출</span><span class="amt expense">-${fmtNum(m.expense)}원</span></div>
             <div class="cat-entry-row"><span class="entry-memo">수입</span><span class="amt income">+${fmtNum(m.income)}원</span></div>
             <div class="cat-entry-row"><span class="entry-memo">투자</span><span class="amt investment">₩${fmtNum(m.investment)}원</span></div>
@@ -2555,7 +2557,7 @@ function renderChart() {
           .map(cat => ({ label: cat.label, amt: m.assetByCat[cat.id] || 0 }))
           .filter(r => r.amt > 0)
           .sort((a, b) => b.amt - a.amt)
-          .map(r => `<div class="cat-entry-row"><span class="entry-memo">${escapeHtml(r.label)}</span><span class="amt income">${fmtNum(r.amt)}원</span></div>`)
+          .map(r => `<div class="cat-entry-row"><span class="entry-memo">${escapeHtml(r.label)}</span><span class="amt neutral">${fmtNum(r.amt)}원</span></div>`)
           .join("");
         breakdownHtml = `<div class="cat-entries">${rows || `<div class="day-detail-empty">분류별 데이터가 없습니다.</div>`}</div>`;
       } else {
