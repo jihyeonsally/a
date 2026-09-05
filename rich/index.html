@@ -1875,7 +1875,17 @@ function renderAssetsScreen() {
   const itemsByCat = {};
   filteredItems.forEach(it => { (itemsByCat[it.categoryId] = itemsByCat[it.categoryId] || []).push(it); });
 
-  listEl.innerHTML = state.assetCategories.map(cat => {
+  // 필터가 "전체"가 아닐 때는, 그 가계부로 등록된 항목이 하나도 없는 분류는 목록에서 숨긴다.
+  const visibleCategories = filter === "all"
+    ? state.assetCategories
+    : state.assetCategories.filter(cat => (itemsByCat[cat.id] || []).length > 0);
+
+  if (visibleCategories.length === 0) {
+    listEl.innerHTML = `<div class="day-detail-empty">해당 가계부로 등록된 자산 항목이 없습니다.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = visibleCategories.map(cat => {
     const items = itemsByCat[cat.id] || [];
     const catTotal = items.reduce((sum, it) => sum + (Number(state.assetMonthValues[it.id]) || 0), 0);
     const expanded = state.assetExpandedCats.has(cat.id);
