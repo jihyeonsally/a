@@ -256,7 +256,10 @@
 
   #assetOwnerFilter.chip-row{ gap:6px; flex:1; justify-content:flex-end; flex-wrap:wrap; }
   #assetOwnerFilter .chip{ padding:6px 10px; font-size:12px; }
-  #manageAssetBtn{ padding:6px 10px; font-size:12px; line-height:1; flex-shrink:0; }
+  #manageAssetBtn{
+    background:none; border:none; padding:4px; font-size:20px; line-height:1;
+    cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  }
 
   .assets-range-row{ padding: 0 16px 16px; }
   #chartMetricFilter.chip-row{ gap:6px; }
@@ -450,6 +453,11 @@
     flex-shrink:0; padding:7px 6px; border-radius:8px; border:1px solid var(--accent);
     background: var(--card); font-family: inherit; font-size:12px; color: var(--text); outline:none;
   }
+  .manage-icon-select{
+    flex-shrink:0; padding:4px 2px; border-radius:8px; border:1px solid var(--accent);
+    background: var(--card); font-family: inherit; font-size:15px; color: var(--text); outline:none;
+    width:42px; text-align:center;
+  }
 
   /* ---------- Search sheet ---------- */
   .search-results{ margin-top:16px; display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; }
@@ -593,7 +601,7 @@
         <button class="chip" data-owner="jihyeon">지현</button>
         <button class="chip" data-owner="hyeonje">현제</button>
       </div>
-      <button class="chip" id="manageAssetBtn">⚙️</button>
+      <button id="manageAssetBtn">⚙️</button>
     </div>
     <div class="day-detail" style="display:block; margin:12px 16px 20px;">
       <div id="assetsEntryList"></div>
@@ -814,6 +822,19 @@ const CATEGORIES_SHARED = {
   asset: ASSET_CATEGORIES,
 };
 
+// 자산 분류 아이콘 선택지. 가계부 투자 카테고리와 같은 아이콘을 우선 배치해
+// 자산 분류(ISA, 국내주식 등)를 만들 때 바로 골라 쓸 수 있게 한다.
+const ASSET_ICON_OPTIONS = ["📁", "🏛️", "📈", "🌐", "🐷", "🏘️", "🧓", "🥇", "🪙", "💰", "🏠", "🚗", "💵", "📦", "🎯", "🛡️", "💎"];
+const DEFAULT_ASSET_ICON = "📁";
+// 기존에 등록된 자산 분류 중 아이콘이 없는 것은, 이름이 투자 카테고리와 같으면
+// 그 투자 카테고리와 동일한 아이콘을 자동으로 붙여준다 (예: "국내주식" → 📈).
+const ASSET_CATEGORY_ICON_BY_LABEL = {};
+CATEGORIES_SHARED.investment.forEach(cat => { ASSET_CATEGORY_ICON_BY_LABEL[cat.label] = cat.icon; });
+ASSET_CATEGORY_ICON_BY_LABEL["코인"] = "🪙";
+function iconForAssetCategoryLabel(label) {
+  return ASSET_CATEGORY_ICON_BY_LABEL[label] || DEFAULT_ASSET_ICON;
+}
+
 // 지현 개인 가계부 카테고리
 const CATEGORIES_JIHYEON = {
   expense: [
@@ -905,7 +926,7 @@ const state = {
   assetOwnerFilter: "all", // 자산 화면 목록 필터 ("all" | "shared" | "jihyeon" | "hyeonje")
   assetStructureUnsub: null,
   assetValuesUnsub: null,
-  assetManageDraft: { kind: null, categoryId: null, text: "", ownerLedger: "shared" }, // 관리 화면에서 현재 열려있는 추가 입력창
+  assetManageDraft: { kind: null, categoryId: null, text: "", ownerLedger: "shared", icon: DEFAULT_ASSET_ICON }, // 관리 화면에서 현재 열려있는 추가 입력창
   assetsMonths: [],  // [{ monthKey, expense, income, investment, asset }] 오름차순, 현재 가계부의 월별 데이터 (전체 기간, 차트용)
   chartMetric: "all", // 차트 화면 하단 토글 ("all" | "balance" | "expense" | "income" | "investment")
   chartStartMonth: null, // 차트 화면 표시 범위 시작 "YYYY-MM"
@@ -967,9 +988,15 @@ function listenAssetStructure(ledgerId) {
     // 처음 보는(=새로 생긴) 분류만 기본적으로 펼쳐서 보여준다. 이미 있던 분류는
     // 사용자가 접거나 펼친 상태를 그대로 유지한다 (첫 로드 때는 전부 "새로 생긴" 것으로
     // 취급되어 모든 분류가 펼쳐진 상태로 시작한다).
+    let needsIconBackfill = false;
     state.assetCategories.forEach(cat => {
       if (!prevIds.has(cat.id)) state.assetExpandedCats.add(cat.id);
+      // 아이콘이 없는 기존 분류는 이름이 같은 투자 카테고리의 아이콘을 자동으로 붙여준다.
+      if (!cat.icon) { cat.icon = iconForAssetCategoryLabel(cat.label); needsIconBackfill = true; }
     });
+    if (needsIconBackfill) {
+      saveAssetStructure().catch(err => console.error("자산 분류 아이콘 자동 설정 실패:", err));
+    }
     renderAssetsScreen();
   }, (err) => {
     console.error("Firestore listen error (asset structure):", err);
@@ -1871,6 +1898,7 @@ function renderAssetsScreen() {
     return `
       <div class="cat-row-wrap">
         <button class="cat-row" data-cat="${cat.id}">
+          <span class="icon">${cat.icon || DEFAULT_ASSET_ICON}</span>
           <span class="name">${escapeHtml(cat.label)}</span>
           <span class="amt income">${fmtNum(catTotal)}원</span>
           <span class="chevron">${expanded ? "▲" : "▼"}</span>
@@ -1962,7 +1990,10 @@ function renderAssetManageList() {
   const ownerSelectHtml = draft.kind === "item"
     ? `<select id="assetManageDraftOwner" class="manage-owner-select">${LEDGERS.map(l => `<option value="${l.id}" ${draft.ownerLedger === l.id ? "selected" : ""}>${LEDGER_SHORT_LABEL[l.id]}</option>`).join("")}</select>`
     : "";
-  const draftInputHtml = `${ownerSelectHtml}<input type="text" id="assetManageDraftInput" class="manage-draft-input" placeholder="${draft.kind === "category" ? "분류명 입력" : "항목명 입력"}" autocomplete="off" /><button class="manage-confirm-btn" id="assetManageConfirmBtn">추가</button>`;
+  const iconSelectHtml = draft.kind === "category"
+    ? `<select id="assetManageDraftIcon" class="manage-icon-select">${ASSET_ICON_OPTIONS.map(icon => `<option value="${icon}" ${draft.icon === icon ? "selected" : ""}>${icon}</option>`).join("")}</select>`
+    : "";
+  const draftInputHtml = `${ownerSelectHtml}${iconSelectHtml}<input type="text" id="assetManageDraftInput" class="manage-draft-input" placeholder="${draft.kind === "category" ? "분류명 입력" : "항목명 입력"}" autocomplete="off" /><button class="manage-confirm-btn" id="assetManageConfirmBtn">추가</button>`;
 
   const catBlocks = state.assetCategories.map(cat => {
     const items = itemsByCat[cat.id] || [];
@@ -1986,6 +2017,7 @@ function renderAssetManageList() {
       <div class="manage-cat-block" data-cat-id="${cat.id}">
         <div class="manage-cat-header">
           <span class="drag-handle" data-drag="cat">⠿</span>
+          <select class="manage-icon-select" data-cat-icon="${cat.id}">${ASSET_ICON_OPTIONS.map(icon => `<option value="${icon}" ${(cat.icon || DEFAULT_ASSET_ICON) === icon ? "selected" : ""}>${icon}</option>`).join("")}</select>
           <span class="manage-name-wrap" data-rename-cat="${cat.id}">
             <span class="manage-name manage-name-display">${escapeHtml(cat.label)}</span>
             <input type="text" class="manage-name-input" style="display:none;" value="${escapeHtml(cat.label)}" autocomplete="off" />
@@ -2020,6 +2052,10 @@ function renderAssetManageList() {
     sel.addEventListener("click", (e) => e.stopPropagation());
     sel.addEventListener("change", (e) => updateAssetItemOwner(e.target.dataset.itemOwner, e.target.value));
   });
+  wrap.querySelectorAll("[data-cat-icon]").forEach(sel => {
+    sel.addEventListener("click", (e) => e.stopPropagation());
+    sel.addEventListener("change", (e) => updateAssetCategoryIcon(e.target.dataset.catIcon, e.target.value));
+  });
   wrap.querySelectorAll("[data-add-item]").forEach(btn => {
     btn.addEventListener("click", () => {
       state.assetManageDraft = { kind: "item", categoryId: btn.dataset.addItem, text: "", ownerLedger: "shared" };
@@ -2028,13 +2064,17 @@ function renderAssetManageList() {
   });
   const addCatBtn = document.getElementById("manageAddCategoryBtn");
   if (addCatBtn) addCatBtn.addEventListener("click", () => {
-    state.assetManageDraft = { kind: "category", categoryId: null, text: "", ownerLedger: "shared" };
+    state.assetManageDraft = { kind: "category", categoryId: null, text: "", ownerLedger: "shared", icon: DEFAULT_ASSET_ICON };
     renderAssetManageList();
   });
 
   const draftOwnerSelect = document.getElementById("assetManageDraftOwner");
   if (draftOwnerSelect) {
     draftOwnerSelect.addEventListener("change", (e) => { state.assetManageDraft.ownerLedger = e.target.value; });
+  }
+  const draftIconSelect = document.getElementById("assetManageDraftIcon");
+  if (draftIconSelect) {
+    draftIconSelect.addEventListener("change", (e) => { state.assetManageDraft.icon = e.target.value; });
   }
   const draftInput = document.getElementById("assetManageDraftInput");
   if (draftInput) {
@@ -2053,13 +2093,13 @@ async function confirmAssetManageDraft() {
 
   if (draft.kind === "category") {
     const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
-    state.assetCategories.push({ id, label: text });
+    state.assetCategories.push({ id, label: text, icon: draft.icon || DEFAULT_ASSET_ICON });
   } else {
     const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
     state.assetItems.push({ id, categoryId: draft.categoryId, label: text, ownerLedger: draft.ownerLedger || "shared" });
     state.assetExpandedCats.add(draft.categoryId); // 추가한 분류는 자산 화면에서 바로 펼쳐서 보여준다
   }
-  state.assetManageDraft = { kind: null, categoryId: null, text: "", ownerLedger: "shared" };
+  state.assetManageDraft = { kind: null, categoryId: null, text: "", ownerLedger: "shared", icon: DEFAULT_ASSET_ICON };
 
   try {
     await saveAssetStructure();
@@ -2127,6 +2167,24 @@ async function updateAssetItemOwner(itemId, ownerLedger) {
   renderAssetsScreen();
 }
 
+async function updateAssetCategoryIcon(categoryId, icon) {
+  const cat = state.assetCategories.find(c => c.id === categoryId);
+  if (!cat) return;
+  const prev = cat.icon || DEFAULT_ASSET_ICON;
+  if (prev === icon) return;
+  cat.icon = icon;
+  try {
+    await saveAssetStructure();
+  } catch (err) {
+    console.error("자산 분류 아이콘 변경 실패:", err);
+    alert("저장에 실패했습니다.\n" + err.message);
+    cat.icon = prev;
+    renderAssetManageList();
+    return;
+  }
+  renderAssetsScreen();
+}
+
 // 분류/항목 이름을 클릭하면 그 자리에서 입력창으로 바뀌어 바로 수정할 수 있다.
 function startAssetRename(nameWrap, kind, id) {
   const display = nameWrap.querySelector(".manage-name-display");
@@ -2178,7 +2236,7 @@ async function commitAssetRename(kind, id, newLabel, display, input) {
 }
 
 function openAssetManageModal() {
-  state.assetManageDraft = { kind: null, categoryId: null, text: "", ownerLedger: "shared" };
+  state.assetManageDraft = { kind: null, categoryId: null, text: "", ownerLedger: "shared", icon: DEFAULT_ASSET_ICON };
   renderAssetManageList();
   document.getElementById("assetManageOverlay").classList.add("show");
 }
