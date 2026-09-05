@@ -593,7 +593,7 @@
     <div class="assets-range-row">
       <div class="chip-row" id="chartMetricFilter">
         <button class="chip active all" data-metric="all">전체</button>
-        <button class="chip balance" data-metric="balance">잔고</button>
+        <button class="chip balance" data-metric="balance">자산</button>
         <button class="chip expense" data-metric="expense">지출</button>
         <button class="chip income" data-metric="income">수입</button>
         <button class="chip investment" data-metric="investment">투자</button>
@@ -604,7 +604,7 @@
         <svg id="chartSvg" viewBox="0 0 320 180" preserveAspectRatio="none"></svg>
       </div>
       <div class="chart-legend" id="chartLegend" style="display:none;">
-        <span class="legend-item"><i style="background:var(--accent)"></i>잔고</span>
+        <span class="legend-item"><i style="background:var(--accent)"></i>자산</span>
         <span class="legend-item"><i style="background:var(--expense)"></i>지출</span>
         <span class="legend-item"><i style="background:var(--income)"></i>수입</span>
         <span class="legend-item"><i style="background:var(--invest)"></i>투자</span>
@@ -1747,19 +1747,21 @@ async function loadAssetMonthlyData() {
       const monthKey = doc.id.slice(prefix.length);
       const entries = (doc.data() && doc.data().entries) || [];
       let expense = 0, income = 0, investment = 0;
+      const expenseByCat = {}, incomeByCat = {}, investmentByCat = {};
       entries.forEach(e => {
-        if (e.type === "income") income += Number(e.amount);
-        else if (e.type === "investment") investment += Number(e.amount);
-        else expense += Number(e.amount);
+        const amt = Number(e.amount);
+        if (e.type === "income") { income += amt; incomeByCat[e.category] = (incomeByCat[e.category] || 0) + amt; }
+        else if (e.type === "investment") { investment += amt; investmentByCat[e.category] = (investmentByCat[e.category] || 0) + amt; }
+        else { expense += amt; expenseByCat[e.category] = (expenseByCat[e.category] || 0) + amt; }
       });
-      byMonth[monthKey] = { monthKey, expense, income, investment, asset: null };
+      byMonth[monthKey] = { monthKey, expense, income, investment, asset: null, expenseByCat, incomeByCat, investmentByCat, itemValues: {} };
     });
   } catch (err) {
     console.error("가계부 데이터 로드 실패:", err);
   }
 
-  // 자산(잔고)은 가계부 토글과 무관하게 공통 자산(ASSET_LEDGER_KEY)의 월별 세부항목
-  // 금액 합계에서 가져온다. "{ledgerId}_structure" 문서는 월 데이터가 아니므로 걸러낸다.
+  // 자산(자산 잔액)은 가계부 토글과 무관하게 공통 자산(ASSET_LEDGER_KEY)의 월별 세부항목
+  // 금액에서 가져온다. "{ledgerId}_structure" 문서는 월 데이터가 아니므로 걸러낸다.
   const assetPrefix = `${ASSET_LEDGER_KEY}_`;
   try {
     const snap = await db.collection(ASSET_COLLECTION)
@@ -1772,10 +1774,10 @@ async function loadAssetMonthlyData() {
       if (!/^\d{4}-\d{2}$/.test(monthKey)) return; // structure 문서 제외
       const values = (doc.data() && doc.data().values) || {};
       const amounts = Object.values(values).filter(v => v != null);
-      if (amounts.length === 0) return; // 값을 하나도 입력하지 않은 달은 null로 두어 이전 값을 이어간다(carry-forward)
-      const assetSum = amounts.reduce((sum, v) => sum + Number(v), 0);
-      if (!byMonth[monthKey]) byMonth[monthKey] = { monthKey, expense: 0, income: 0, investment: 0, asset: null };
-      byMonth[monthKey].asset = assetSum;
+      if (!byMonth[monthKey]) byMonth[monthKey] = { monthKey, expense: 0, income: 0, investment: 0, asset: null, expenseByCat: {}, incomeByCat: {}, investmentByCat: {}, itemValues: {} };
+      byMonth[monthKey].itemValues = values; // 그 달에 실제 입력된 항목별 값 (없는 항목은 renderChart에서 carry-forward)
+      if (amounts.length === 0) return; // 값을 하나도 입력하지 않은 달은 asset을 null로 두어 이전 값을 이어간다(carry-forward)
+      byMonth[monthKey].asset = amounts.reduce((sum, v) => sum + Number(v), 0);
     });
   } catch (err) {
     console.error("자산 데이터 로드 실패:", err);
@@ -2335,10 +2337,24 @@ function renderChart() {
   const fullRangeKeys = buildMonthRange(historyStart, state.chartEndMonth);
 
   let lastAsset = 0;
+  let lastItemValues = {};
   const fullRange = fullRangeKeys.map(key => {
-    const d = byKey[key] || { expense: 0, income: 0, investment: 0, asset: null };
+    const d = byKey[key] || { expense: 0, income: 0, investment: 0, asset: null, expenseByCat: {}, incomeByCat: {}, investmentByCat: {}, itemValues: {} };
     if (d.asset != null) lastAsset = d.asset;
-    return { monthKey: key, expense: d.expense, income: d.income, investment: d.investment, balance: lastAsset };
+    Object.keys(d.itemValues || {}).forEach(itemId => {
+      if (d.itemValues[itemId] != null) lastItemValues[itemId] = d.itemValues[itemId];
+    });
+    // 자산 분류별 금액도 항목별 carry-forward 값을 기준으로 계산한다.
+    const assetByCat = {};
+    state.assetItems.forEach(it => {
+      const v = lastItemValues[it.id];
+      if (v != null) assetByCat[it.categoryId] = (assetByCat[it.categoryId] || 0) + Number(v);
+    });
+    return {
+      monthKey: key, expense: d.expense, income: d.income, investment: d.investment, balance: lastAsset,
+      expenseByCat: d.expenseByCat || {}, incomeByCat: d.incomeByCat || {}, investmentByCat: d.investmentByCat || {},
+      assetByCat,
+    };
   });
 
   const byKeyFull = {};
@@ -2372,14 +2388,43 @@ function renderChart() {
       sign = "+"; amt = m.investment; cls = "investment";
     }
     const expanded = state.chartExpandedMonths.has(m.monthKey);
-    const balSign = m.balance < 0 ? "-" : "+";
-    const breakdownHtml = expanded ? `
-      <div class="cat-entries">
-        <div class="cat-entry-row"><span class="entry-memo">잔고</span><span class="amt ${m.balance < 0 ? "expense" : "income"}">${balSign}${fmtNum(Math.abs(m.balance))}원</span></div>
-        <div class="cat-entry-row"><span class="entry-memo">지출</span><span class="amt expense">-${fmtNum(m.expense)}원</span></div>
-        <div class="cat-entry-row"><span class="entry-memo">수입</span><span class="amt income">+${fmtNum(m.income)}원</span></div>
-        <div class="cat-entry-row"><span class="entry-memo">투자</span><span class="amt investment">+${fmtNum(m.investment)}원</span></div>
-      </div>` : "";
+    let breakdownHtml = "";
+    if (expanded) {
+      if (metric === "all") {
+        const balSign = m.balance < 0 ? "-" : "+";
+        breakdownHtml = `
+          <div class="cat-entries">
+            <div class="cat-entry-row"><span class="entry-memo">자산</span><span class="amt ${m.balance < 0 ? "expense" : "income"}">${balSign}${fmtNum(Math.abs(m.balance))}원</span></div>
+            <div class="cat-entry-row"><span class="entry-memo">지출</span><span class="amt expense">-${fmtNum(m.expense)}원</span></div>
+            <div class="cat-entry-row"><span class="entry-memo">수입</span><span class="amt income">+${fmtNum(m.income)}원</span></div>
+            <div class="cat-entry-row"><span class="entry-memo">투자</span><span class="amt investment">+${fmtNum(m.investment)}원</span></div>
+          </div>`;
+      } else if (metric === "balance") {
+        // 자산 분류별 금액만 표시 (분류 하위 항목은 표시하지 않는다)
+        const rows = state.assetCategories
+          .map(cat => ({ label: cat.label, amt: m.assetByCat[cat.id] || 0 }))
+          .filter(r => r.amt > 0)
+          .sort((a, b) => b.amt - a.amt)
+          .map(r => `<div class="cat-entry-row"><span class="entry-memo">${escapeHtml(r.label)}</span><span class="amt income">${fmtNum(r.amt)}원</span></div>`)
+          .join("");
+        breakdownHtml = `<div class="cat-entries">${rows || `<div class="day-detail-empty">분류별 데이터가 없습니다.</div>`}</div>`;
+      } else {
+        // 지출/수입/투자: 카테고리별 금액만 표시 (카테고리 내 개별 내역은 표시하지 않는다)
+        const catDefs = categoriesForLedger(state.currentLedger)[metric] || [];
+        const byCat = m[`${metric}ByCat`] || {};
+        const rowSign = metric === "expense" ? "-" : "+";
+        const rows = Object.keys(byCat)
+          .map(catId => {
+            const def = catDefs.find(c => c.id === catId);
+            return { label: def ? def.label : catId, amt: byCat[catId] };
+          })
+          .filter(r => r.amt > 0)
+          .sort((a, b) => b.amt - a.amt)
+          .map(r => `<div class="cat-entry-row"><span class="entry-memo">${escapeHtml(r.label)}</span><span class="amt ${metric}">${rowSign}${fmtNum(r.amt)}원</span></div>`)
+          .join("");
+        breakdownHtml = `<div class="cat-entries">${rows || `<div class="day-detail-empty">카테고리별 데이터가 없습니다.</div>`}</div>`;
+      }
+    }
     return `
       <div class="cat-row-wrap">
         <button class="cat-row" data-month="${m.monthKey}">
