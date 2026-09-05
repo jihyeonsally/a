@@ -2403,9 +2403,9 @@ initAssetManageDrag();
 
 /* ---------- 차트 화면 ---------- */
 
-// y좌표가 그래프 위쪽 가장자리에 너무 가까우면 값 라벨을 점 아래로 내려서 잘리지 않게 한다.
-function valueLabelY(y, plotTop) {
-  return (y - plotTop) < 12 ? y + 11 : y - 6;
+// 값 라벨은 선/영역 채우기와 겹치지 않도록 항상 점 위쪽에 그린다.
+function valueLabelY(y) {
+  return y - 6;
 }
 
 // "전체" 콤보 차트와 개별 지표(자산/지출/수입/투자) 그래프에서 항상 같은 선 모양을 쓰도록
@@ -2469,7 +2469,7 @@ function renderTrendChart(svg, series, metric, chartWidth) {
     svg.innerHTML = `
       ${axisHtml}
       <circle cx="${((W + PAD_L) / 2).toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}" />
-      <text x="${((W + PAD_L) / 2).toFixed(1)}" y="${valueLabelY(y, PAD_TOP).toFixed(1)}" font-size="8" font-weight="600" fill="${color}" text-anchor="middle">${fmtNum(series[0].value)}</text>
+      <text x="${((W + PAD_L) / 2).toFixed(1)}" y="${valueLabelY(y).toFixed(1)}" font-size="8" font-weight="600" fill="${color}" text-anchor="middle">${fmtNum(series[0].value)}</text>
       <text x="${((W + PAD_L) / 2).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="middle">${firstLabel}</text>`;
     return;
   }
@@ -2483,7 +2483,7 @@ function renderTrendChart(svg, series, metric, chartWidth) {
   const dots = series.map((s, i) => `<circle cx="${xOf(i).toFixed(1)}" cy="${yOf(s.value).toFixed(1)}" r="2.5" fill="${color}" />`).join("");
   const valueLabels = series.map((s, i) => {
     const x = xOf(i), y = yOf(s.value);
-    return `<text x="${x.toFixed(1)}" y="${valueLabelY(y, PAD_TOP).toFixed(1)}" font-size="7" font-weight="600" fill="${color}" text-anchor="${edgeAwareAnchor(i, n)}">${fmtNum(s.value)}</text>`;
+    return `<text x="${x.toFixed(1)}" y="${valueLabelY(y).toFixed(1)}" font-size="7" font-weight="600" fill="${color}" text-anchor="${edgeAwareAnchor(i, n)}">${fmtNum(s.value)}</text>`;
   }).join("");
   // 달 수만큼 폭을 확보해뒀기 때문에(MIN_CHART_MONTH_WIDTH) 처음/끝뿐 아니라 매달 라벨을 표시한다.
   const monthLabels = series.map((s, i) => {
