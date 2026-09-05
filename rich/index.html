@@ -443,10 +443,6 @@
     flex-shrink:0; padding:7px 6px; border-radius:8px; border:1px solid var(--accent);
     background: var(--card); font-family: inherit; font-size:12px; color: var(--text); outline:none;
   }
-  .manage-owner-tag{
-    flex-shrink:0; font-size:11px; font-weight:700; color: var(--text-dim);
-    background: var(--accent-soft); padding:2px 7px; border-radius:999px;
-  }
 
   /* ---------- Search sheet ---------- */
   .search-results{ margin-top:16px; display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; }
@@ -1964,7 +1960,7 @@ function renderAssetManageList() {
     const itemRows = items.map(it => `
       <div class="manage-item-row" data-item-id="${it.id}">
         <span class="drag-handle" data-drag="item">⠿</span>
-        <span class="manage-owner-tag">${LEDGER_SHORT_LABEL[it.ownerLedger || "shared"]}</span>
+        <select class="manage-owner-select" data-item-owner="${it.id}">${LEDGERS.map(l => `<option value="${l.id}" ${(it.ownerLedger || "shared") === l.id ? "selected" : ""}>${LEDGER_SHORT_LABEL[l.id]}</option>`).join("")}</select>
         <span class="manage-name-wrap" data-rename-item="${it.id}">
           <span class="manage-name manage-name-display">${escapeHtml(it.label)}</span>
           <input type="text" class="manage-name-input" style="display:none;" value="${escapeHtml(it.label)}" autocomplete="off" />
@@ -2010,6 +2006,10 @@ function renderAssetManageList() {
   });
   wrap.querySelectorAll("[data-rename-item]").forEach(nameWrap => {
     nameWrap.addEventListener("click", () => startAssetRename(nameWrap, "item", nameWrap.dataset.renameItem));
+  });
+  wrap.querySelectorAll("[data-item-owner]").forEach(sel => {
+    sel.addEventListener("click", (e) => e.stopPropagation());
+    sel.addEventListener("change", (e) => updateAssetItemOwner(e.target.dataset.itemOwner, e.target.value));
   });
   wrap.querySelectorAll("[data-add-item]").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -2097,6 +2097,24 @@ async function deleteAssetItem(itemId) {
     alert("삭제에 실패했습니다.\n" + err.message);
   }
   renderAssetManageList();
+  renderAssetsScreen();
+}
+
+async function updateAssetItemOwner(itemId, ownerLedger) {
+  const item = state.assetItems.find(it => it.id === itemId);
+  if (!item) return;
+  const prev = item.ownerLedger || "shared";
+  if (prev === ownerLedger) return;
+  item.ownerLedger = ownerLedger;
+  try {
+    await saveAssetStructure();
+  } catch (err) {
+    console.error("자산 항목 소유 가계부 변경 실패:", err);
+    alert("저장에 실패했습니다.\n" + err.message);
+    item.ownerLedger = prev;
+    renderAssetManageList();
+    return;
+  }
   renderAssetsScreen();
 }
 
