@@ -254,6 +254,9 @@
   }
   .assets-daterange-sep{ color: var(--text-dim); font-weight:600; flex-shrink:0; }
 
+  #assetOwnerFilter.chip-row{ gap:6px; flex:1; justify-content:flex-end; flex-wrap:wrap; }
+  #assetOwnerFilter .chip{ padding:6px 10px; font-size:12px; }
+
   .assets-range-row{ padding: 0 16px 16px; }
   #chartMetricFilter.chip-row{ gap:6px; }
   #chartMetricFilter .chip{ padding:6px 12px; font-size:12px; }
@@ -436,6 +439,14 @@
     border:none; background: var(--accent); color:#fff; font-family:inherit; font-weight:700;
     font-size:12px; padding:7px 12px; border-radius:8px; cursor:pointer; flex-shrink:0;
   }
+  .manage-owner-select{
+    flex-shrink:0; padding:7px 6px; border-radius:8px; border:1px solid var(--accent);
+    background: var(--card); font-family: inherit; font-size:12px; color: var(--text); outline:none;
+  }
+  .manage-owner-tag{
+    flex-shrink:0; font-size:11px; font-weight:700; color: var(--text-dim);
+    background: var(--accent-soft); padding:2px 7px; border-radius:999px;
+  }
 
   /* ---------- Search sheet ---------- */
   .search-results{ margin-top:16px; display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; }
@@ -564,16 +575,22 @@
 
   <!-- Screen 3: Asset entries (월별 자산 내역 목록) -->
   <div class="screen" id="screen-assets">
+    <div class="dash-toggle">
+      <span class="dash-total mono" id="assetsMonthTotal">0원</span>
+      <div class="chip-row" id="assetOwnerFilter">
+        <button class="chip active" data-owner="all">전체</button>
+        <button class="chip" data-owner="shared">공용</button>
+        <button class="chip" data-owner="jihyeon">지현</button>
+        <button class="chip" data-owner="hyeonje">현제</button>
+      </div>
+      <button class="chip" id="manageAssetBtn">관리</button>
+    </div>
     <div class="month-nav">
       <h2 id="assetsMonthLabel"></h2>
       <div class="navbtns">
         <button class="navbtn" id="assetsPrevMonth">‹</button>
         <button class="navbtn" id="assetsNextMonth">›</button>
       </div>
-    </div>
-    <div class="dash-toggle">
-      <span class="dash-total mono" id="assetsMonthTotal">0원</span>
-      <button class="chip" id="manageAssetBtn">관리</button>
     </div>
     <div class="day-detail" style="display:block; margin:12px 16px 20px;">
       <div id="assetsEntryList"></div>
@@ -741,6 +758,8 @@ const LEDGERS = [
   { id: "jihyeon",  label: "지현 가계부", color: "#4B8060" },
   { id: "hyeonje", label: "현제 가계부", color: "#5B7FA6" },
 ];
+// 자산 항목의 소유 가계부 표시용 짧은 이름 (관리 목록, 필터 칩 등에서 사용)
+const LEDGER_SHORT_LABEL = { shared: "공용", jihyeon: "지현", hyeonje: "현제" };
 
 const PERSONAL_ALLOWANCE = 500000; // 지현/현제 개인 가계부는 수입 대신 고정 용돈으로 계산
 const OVERSPEND_WARNING_THRESHOLD = 400000; // 이 금액을 넘으면 과소비 주의 배너 표시
@@ -880,9 +899,10 @@ const state = {
   assetItems: [],       // [{ id, categoryId, label }] 자산 세부항목 (구조, 월과 무관)
   assetExpandedCats: new Set(), // 자산 화면에서 펼쳐진 분류 id 목록
   assetMonthValues: {}, // { [itemId]: amount } 현재 보고 있는 월의 세부항목별 최신 금액
+  assetOwnerFilter: "all", // 자산 화면 목록 필터 ("all" | "shared" | "jihyeon" | "hyeonje")
   assetStructureUnsub: null,
   assetValuesUnsub: null,
-  assetManageDraft: { kind: null, categoryId: null, text: "" }, // 관리 화면에서 현재 열려있는 추가 입력창
+  assetManageDraft: { kind: null, categoryId: null, text: "", ownerLedger: "shared" }, // 관리 화면에서 현재 열려있는 추가 입력창
   assetsMonths: [],  // [{ monthKey, expense, income, investment, asset }] 오름차순, 현재 가계부의 월별 데이터 (전체 기간, 차트용)
   chartMetric: "all", // 차트 화면 하단 토글 ("all" | "balance" | "expense" | "income" | "investment")
   chartStartMonth: null, // 차트 화면 표시 범위 시작 "YYYY-MM"
@@ -1018,8 +1038,11 @@ function switchLedger(id) {
     document.getElementById("dashIncomeBtn").classList.remove("active");
     document.getElementById("dashInvestmentBtn").classList.remove("active");
   }
+  // 지현/현제 가계부는 지출만 기록하므로, 차트 화면의 지표 토글도 지출로 고정한다.
+  if (id !== "shared") state.chartMetric = "expense";
   localStorage.setItem("ledger_selected", id);
   updateDashTypeVisibility();
+  updateChartMetricVisibility();
   renderLedgerToggle();
   renderCalendar();
   renderDayDetail();
@@ -1043,6 +1066,15 @@ function updateDashTypeVisibility() {
   const isShared = state.currentLedger === "shared";
   document.getElementById("dashInvestmentBtn").style.display = isShared ? "" : "none";
   document.getElementById("dashIncomeBtn").style.display = isShared ? "" : "none";
+}
+
+// 지현/현제 가계부는 지출 내역만 등록할 수 있으므로, 차트 화면에서도
+// 지출 지표만 볼 수 있게 하고 나머지 지표 버튼(전체/자산/수입/투자)은 숨긴다.
+function updateChartMetricVisibility() {
+  const isShared = state.currentLedger === "shared";
+  document.querySelectorAll("#chartMetricFilter .chip").forEach(c => {
+    c.style.display = (isShared || c.dataset.metric === "expense") ? "" : "none";
+  });
 }
 
 document.querySelectorAll(".ledger-toggle-btn").forEach(btn => {
@@ -1805,8 +1837,13 @@ function renderAssetsScreen() {
     return;
   }
 
+  const filter = state.assetOwnerFilter;
+  const filteredItems = filter === "all"
+    ? state.assetItems
+    : state.assetItems.filter(it => (it.ownerLedger || "shared") === filter);
+
   const itemsByCat = {};
-  state.assetItems.forEach(it => { (itemsByCat[it.categoryId] = itemsByCat[it.categoryId] || []).push(it); });
+  filteredItems.forEach(it => { (itemsByCat[it.categoryId] = itemsByCat[it.categoryId] || []).push(it); });
 
   listEl.innerHTML = state.assetCategories.map(cat => {
     const items = itemsByCat[cat.id] || [];
@@ -1899,6 +1936,16 @@ document.getElementById("assetsNextMonth").addEventListener("click", () => {
 });
 document.getElementById("manageAssetBtn").addEventListener("click", openAssetManageModal);
 
+document.getElementById("assetOwnerFilter").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  state.assetOwnerFilter = chip.dataset.owner;
+  document.querySelectorAll("#assetOwnerFilter .chip").forEach(c => {
+    c.classList.toggle("active", c.dataset.owner === state.assetOwnerFilter);
+  });
+  renderAssetsScreen();
+});
+
 /* ---------- 자산 분류/항목 관리 모달 ---------- */
 // assetManageDraft.kind: null(입력창 없음) | "category"(분류 추가 입력창) | "item"(특정 분류의 항목 추가 입력창)
 function renderAssetManageList() {
@@ -1907,13 +1954,17 @@ function renderAssetManageList() {
   state.assetItems.forEach(it => { (itemsByCat[it.categoryId] = itemsByCat[it.categoryId] || []).push(it); });
 
   const draft = state.assetManageDraft;
-  const draftInputHtml = `<input type="text" id="assetManageDraftInput" class="manage-draft-input" placeholder="${draft.kind === "category" ? "분류명 입력" : "항목명 입력"}" autocomplete="off" /><button class="manage-confirm-btn" id="assetManageConfirmBtn">추가</button>`;
+  const ownerSelectHtml = draft.kind === "item"
+    ? `<select id="assetManageDraftOwner" class="manage-owner-select">${LEDGERS.map(l => `<option value="${l.id}" ${draft.ownerLedger === l.id ? "selected" : ""}>${LEDGER_SHORT_LABEL[l.id]}</option>`).join("")}</select>`
+    : "";
+  const draftInputHtml = `${ownerSelectHtml}<input type="text" id="assetManageDraftInput" class="manage-draft-input" placeholder="${draft.kind === "category" ? "분류명 입력" : "항목명 입력"}" autocomplete="off" /><button class="manage-confirm-btn" id="assetManageConfirmBtn">추가</button>`;
 
   const catBlocks = state.assetCategories.map(cat => {
     const items = itemsByCat[cat.id] || [];
     const itemRows = items.map(it => `
       <div class="manage-item-row" data-item-id="${it.id}">
         <span class="drag-handle" data-drag="item">⠿</span>
+        <span class="manage-owner-tag">${LEDGER_SHORT_LABEL[it.ownerLedger || "shared"]}</span>
         <span class="manage-name-wrap" data-rename-item="${it.id}">
           <span class="manage-name manage-name-display">${escapeHtml(it.label)}</span>
           <input type="text" class="manage-name-input" style="display:none;" value="${escapeHtml(it.label)}" autocomplete="off" />
@@ -1962,16 +2013,20 @@ function renderAssetManageList() {
   });
   wrap.querySelectorAll("[data-add-item]").forEach(btn => {
     btn.addEventListener("click", () => {
-      state.assetManageDraft = { kind: "item", categoryId: btn.dataset.addItem, text: "" };
+      state.assetManageDraft = { kind: "item", categoryId: btn.dataset.addItem, text: "", ownerLedger: "shared" };
       renderAssetManageList();
     });
   });
   const addCatBtn = document.getElementById("manageAddCategoryBtn");
   if (addCatBtn) addCatBtn.addEventListener("click", () => {
-    state.assetManageDraft = { kind: "category", categoryId: null, text: "" };
+    state.assetManageDraft = { kind: "category", categoryId: null, text: "", ownerLedger: "shared" };
     renderAssetManageList();
   });
 
+  const draftOwnerSelect = document.getElementById("assetManageDraftOwner");
+  if (draftOwnerSelect) {
+    draftOwnerSelect.addEventListener("change", (e) => { state.assetManageDraft.ownerLedger = e.target.value; });
+  }
   const draftInput = document.getElementById("assetManageDraftInput");
   if (draftInput) {
     draftInput.focus();
@@ -1992,10 +2047,10 @@ async function confirmAssetManageDraft() {
     state.assetCategories.push({ id, label: text });
   } else {
     const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
-    state.assetItems.push({ id, categoryId: draft.categoryId, label: text });
+    state.assetItems.push({ id, categoryId: draft.categoryId, label: text, ownerLedger: draft.ownerLedger || "shared" });
     state.assetExpandedCats.add(draft.categoryId); // 추가한 분류는 자산 화면에서 바로 펼쳐서 보여준다
   }
-  state.assetManageDraft = { kind: null, categoryId: null, text: "" };
+  state.assetManageDraft = { kind: null, categoryId: null, text: "", ownerLedger: "shared" };
 
   try {
     await saveAssetStructure();
@@ -2096,7 +2151,7 @@ async function commitAssetRename(kind, id, newLabel, display, input) {
 }
 
 function openAssetManageModal() {
-  state.assetManageDraft = { kind: null, categoryId: null, text: "" };
+  state.assetManageDraft = { kind: null, categoryId: null, text: "", ownerLedger: "shared" };
   renderAssetManageList();
   document.getElementById("assetManageOverlay").classList.add("show");
 }
@@ -2789,6 +2844,8 @@ searchInput.addEventListener("input", renderSearchResults);
 renderLedgerToggle();
 updateLedgerToggleVisibility("calendar");
 updateDashTypeVisibility();
+if (state.currentLedger !== "shared") state.chartMetric = "expense";
+updateChartMetricVisibility();
 renderMonthSummary();
 listenCalendarMonth(state.currentLedger, state.calDate);
 listenDashboardMonth(state.currentLedger, state.dashDate);
