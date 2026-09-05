@@ -403,10 +403,16 @@
   .manage-cat-block{ padding: 10px 0; border-bottom:1px solid var(--border); background: var(--bg); }
   .manage-cat-block:last-of-type{ border-bottom:none; }
   .manage-cat-header{ display:flex; align-items:center; gap:6px; }
-  .manage-name{ flex:1; min-width:0; font-weight:600; font-size:14px; color: var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .manage-name-wrap{ flex:1; min-width:0; cursor:pointer; }
+  .manage-name{ display:block; font-weight:600; font-size:14px; color: var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .manage-name-input{
+    width:100%; padding:4px 6px; border-radius:6px; border:1px solid var(--accent);
+    background: var(--card); font-family:inherit; font-size:14px; font-weight:600; color: var(--text); outline:none;
+  }
   .manage-items{ display:flex; flex-direction:column; gap:2px; padding-left:14px; margin-top:6px; }
   .manage-item-row{ display:flex; align-items:center; gap:6px; padding:6px 0; font-size:13px; background: var(--bg); }
   .manage-item-row .manage-name{ font-weight:500; font-size:13px; }
+  .manage-item-row .manage-name-input{ font-size:13px; font-weight:500; }
   .manage-del-btn{
     border:none; background:none; color: var(--expense); font-family:inherit; font-size:12px;
     font-weight:700; cursor:pointer; padding:4px 8px; flex-shrink:0;
@@ -1895,7 +1901,10 @@ function renderAssetManageList() {
     const itemRows = items.map(it => `
       <div class="manage-item-row" data-item-id="${it.id}">
         <span class="drag-handle" data-drag="item">⠿</span>
-        <span class="manage-name">${escapeHtml(it.label)}</span>
+        <span class="manage-name-wrap" data-rename-item="${it.id}">
+          <span class="manage-name manage-name-display">${escapeHtml(it.label)}</span>
+          <input type="text" class="manage-name-input" style="display:none;" value="${escapeHtml(it.label)}" autocomplete="off" />
+        </span>
         <button class="manage-del-btn" data-del-item="${it.id}">삭제</button>
       </div>`).join("");
 
@@ -1908,7 +1917,10 @@ function renderAssetManageList() {
       <div class="manage-cat-block" data-cat-id="${cat.id}">
         <div class="manage-cat-header">
           <span class="drag-handle" data-drag="cat">⠿</span>
-          <span class="manage-name">${escapeHtml(cat.label)}</span>
+          <span class="manage-name-wrap" data-rename-cat="${cat.id}">
+            <span class="manage-name manage-name-display">${escapeHtml(cat.label)}</span>
+            <input type="text" class="manage-name-input" style="display:none;" value="${escapeHtml(cat.label)}" autocomplete="off" />
+          </span>
           <button class="manage-del-btn" data-del-cat="${cat.id}">삭제</button>
         </div>
         <div class="manage-items" data-cat-items="${cat.id}">${itemRows}${itemAddRow}</div>
@@ -1928,6 +1940,12 @@ function renderAssetManageList() {
   });
   wrap.querySelectorAll("[data-del-item]").forEach(btn => {
     btn.addEventListener("click", () => deleteAssetItem(btn.dataset.delItem));
+  });
+  wrap.querySelectorAll("[data-rename-cat]").forEach(nameWrap => {
+    nameWrap.addEventListener("click", () => startAssetRename(nameWrap, "cat", nameWrap.dataset.renameCat));
+  });
+  wrap.querySelectorAll("[data-rename-item]").forEach(nameWrap => {
+    nameWrap.addEventListener("click", () => startAssetRename(nameWrap, "item", nameWrap.dataset.renameItem));
   });
   wrap.querySelectorAll("[data-add-item]").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -2012,6 +2030,56 @@ async function deleteAssetItem(itemId) {
   }
   renderAssetManageList();
   renderAssetsScreen();
+}
+
+// 분류/항목 이름을 클릭하면 그 자리에서 입력창으로 바뀌어 바로 수정할 수 있다.
+function startAssetRename(nameWrap, kind, id) {
+  const display = nameWrap.querySelector(".manage-name-display");
+  const input = nameWrap.querySelector(".manage-name-input");
+  if (input.style.display === "block") return; // 이미 편집 중이면 무시
+  display.style.display = "none";
+  input.style.display = "block";
+  input.focus();
+  input.select();
+
+  const finish = () => {
+    input.removeEventListener("blur", finish);
+    input.removeEventListener("keydown", onKeydown);
+    commitAssetRename(kind, id, input.value.trim(), display, input);
+  };
+  const onKeydown = (e) => {
+    if (e.key === "Enter") input.blur();
+    else if (e.key === "Escape") { input.value = display.textContent; input.blur(); }
+  };
+  input.addEventListener("blur", finish);
+  input.addEventListener("keydown", onKeydown);
+}
+
+async function commitAssetRename(kind, id, newLabel, display, input) {
+  const list = kind === "cat" ? state.assetCategories : state.assetItems;
+  const target = list.find(x => x.id === id);
+  const oldLabel = target ? target.label : "";
+
+  if (!newLabel || !target || newLabel === oldLabel) {
+    input.style.display = "none";
+    display.style.display = "block";
+    return;
+  }
+
+  target.label = newLabel;
+  display.textContent = newLabel;
+  input.style.display = "none";
+  display.style.display = "block";
+
+  try {
+    await saveAssetStructure();
+    renderAssetsScreen();
+  } catch (err) {
+    console.error("이름 수정 실패:", err);
+    alert("수정에 실패했습니다.\n" + err.message);
+    target.label = oldLabel;
+    display.textContent = oldLabel;
+  }
 }
 
 function openAssetManageModal() {
