@@ -1145,6 +1145,14 @@ function ymd(d) {
   return `${y}-${m}-${day}`;
 }
 function fmtNum(n) { return Number(n).toLocaleString("ko-KR"); }
+// 차트 세로축 눈금처럼 좁은 공간에 표시할 때 쓰는 축약 표기 (예: 1,500,000 → 150만)
+function fmtCompact(n) {
+  const v = Number(n);
+  const abs = Math.abs(v);
+  if (abs >= 100000000) return `${(v / 100000000).toFixed(abs % 100000000 === 0 ? 0 : 1)}억`;
+  if (abs >= 10000) return `${(v / 10000).toFixed(abs % 10000 === 0 ? 0 : 1)}만`;
+  return fmtNum(v);
+}
 function weekdayClass(dow) {
   return dow === 0 ? "wd-sun" : dow === 6 ? "wd-sat" : "";
 }
@@ -1255,7 +1263,7 @@ function renderDayDetail() {
     const cat = (categoriesForLedger(state.currentLedger)[e.type] || []).find(c => c.id === e.category);
     const icon = cat ? cat.icon : "📦";
     const name = cat ? cat.label : e.category;
-    const sign = e.type === "income" ? "+" : "-";
+    const sign = e.type === "income" ? "+" : e.type === "investment" ? "₩" : "-";
     return `
       <div class="day-detail-row" data-id="${e.id}">
         <span class="icon">${icon}</span>
@@ -1707,7 +1715,7 @@ function renderDashboard() {
     renderDonutChart(chartEl, calloutsEl, catsWithAmount, totals, donutDenom, state.dashType, remainingShare);
   }
 
-  const sign = state.dashType === "income" ? "+" : "-";
+  const sign = state.dashType === "income" ? "+" : state.dashType === "investment" ? "₩" : "-";
 
   document.getElementById("catList").innerHTML = catsWithAmount.map(c => {
     const expanded = state.dashExpandedCats.has(c.id);
@@ -2343,7 +2351,7 @@ function valueLabelY(y, plotTop) {
 
 function renderTrendChart(svg, series, metric) {
   const W = 320, H = 180;
-  const PAD_L = 8, PAD_R = 8, PAD_TOP = 18, PAD_BOTTOM = 22;
+  const PAD_L = 34, PAD_R = 8, PAD_TOP = 18, PAD_BOTTOM = 22;
   const plotH = H - PAD_TOP - PAD_BOTTOM;
   const color = metric === "expense" ? "var(--expense)"
     : metric === "income" ? "var(--income)"
@@ -2358,12 +2366,23 @@ function renderTrendChart(svg, series, metric) {
   const range = (maxV - minV) || 1;
   const yOf = (v) => PAD_TOP + plotH - ((v - minV) / range) * plotH;
 
+  // 좌측 세로축: 월별 금액 범위(최소~최대)에 맞춰 자동으로 3단계 눈금을 표시한다.
+  const axisTicks = [maxV, (maxV + minV) / 2, minV];
+  const axisHtml = `
+    <line x1="${PAD_L}" y1="${PAD_TOP}" x2="${PAD_L}" y2="${H - PAD_BOTTOM}" stroke="var(--border)" stroke-width="1" />
+    ${axisTicks.map(v => {
+      const y = yOf(v);
+      return `<line x1="${(PAD_L - 3).toFixed(1)}" y1="${y.toFixed(1)}" x2="${PAD_L.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--text-dim)" stroke-width="1" />
+        <text x="${(PAD_L - 6).toFixed(1)}" y="${(y + 2.5).toFixed(1)}" font-size="7" fill="var(--text-dim)" text-anchor="end">${fmtCompact(v)}</text>`;
+    }).join("")}`;
+
   if (n === 1) {
     const y = yOf(series[0].value);
     svg.innerHTML = `
-      <circle cx="${(W / 2).toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}" />
-      <text x="${(W / 2).toFixed(1)}" y="${valueLabelY(y, PAD_TOP).toFixed(1)}" font-size="8" font-weight="600" fill="${color}" text-anchor="middle">${fmtNum(series[0].value)}</text>
-      <text x="${(W / 2).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="middle">${firstLabel}</text>`;
+      ${axisHtml}
+      <circle cx="${((W + PAD_L) / 2).toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}" />
+      <text x="${((W + PAD_L) / 2).toFixed(1)}" y="${valueLabelY(y, PAD_TOP).toFixed(1)}" font-size="8" font-weight="600" fill="${color}" text-anchor="middle">${fmtNum(series[0].value)}</text>
+      <text x="${((W + PAD_L) / 2).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="middle">${firstLabel}</text>`;
     return;
   }
 
@@ -2381,6 +2400,7 @@ function renderTrendChart(svg, series, metric) {
   }).join("");
 
   svg.innerHTML = `
+    ${axisHtml}
     <line x1="${PAD_L}" y1="${zeroY.toFixed(1)}" x2="${W - PAD_R}" y2="${zeroY.toFixed(1)}" stroke="var(--border)" stroke-width="1" />
     <polygon points="${areaPoints}" fill="${color}" opacity="0.12" />
     <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
@@ -2422,7 +2442,6 @@ function renderComboChart(svg, months) {
     const h = Math.max(2, Math.abs(zeroY - valY));
     svg.innerHTML = `
       <rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW}" height="${h.toFixed(1)}" rx="3" fill="var(--accent)" opacity="0.55" />
-      <text x="${cx.toFixed(1)}" y="${valueLabelY(top, PAD_TOP).toFixed(1)}" font-size="8" font-weight="600" fill="var(--accent)" text-anchor="middle">${fmtNum(months[0].balance)}</text>
       <circle cx="${cx.toFixed(1)}" cy="${expenseY(months[0].expense).toFixed(1)}" r="2.5" fill="var(--expense)" />
       <circle cx="${cx.toFixed(1)}" cy="${incomeY(months[0].income).toFixed(1)}" r="2.5" fill="var(--income)" />
       <circle cx="${cx.toFixed(1)}" cy="${investmentY(months[0].investment).toFixed(1)}" r="2.5" fill="var(--invest)" />
@@ -2436,14 +2455,12 @@ function renderComboChart(svg, months) {
   const zeroYBal = balanceY(0);
 
   let bars = "";
-  let barLabels = "";
   months.forEach((m, i) => {
     const cx = xOfCenter(i);
     const y = balanceY(m.balance);
     const top = Math.min(zeroYBal, y);
     const h = Math.max(1.5, Math.abs(zeroYBal - y));
     bars += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--accent)" opacity="0.5" />`;
-    barLabels += `<text x="${cx.toFixed(1)}" y="${valueLabelY(top, PAD_TOP).toFixed(1)}" font-size="6.5" font-weight="600" fill="var(--accent)" text-anchor="middle">${fmtNum(m.balance)}</text>`;
   });
 
   const lineFor = (key, yOf, color) => {
@@ -2455,7 +2472,6 @@ function renderComboChart(svg, months) {
   svg.innerHTML = `
     <line x1="${PAD_L}" y1="${zeroYBal.toFixed(1)}" x2="${W - PAD_R}" y2="${zeroYBal.toFixed(1)}" stroke="var(--border)" stroke-width="1" />
     ${bars}
-    ${barLabels}
     ${lineFor("expense", expenseY, "var(--expense)")}
     ${lineFor("income", incomeY, "var(--income)")}
     ${lineFor("investment", investmentY, "var(--invest)")}
