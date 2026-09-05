@@ -2503,8 +2503,8 @@ function renderComboChart(svg, months) {
     svg.innerHTML = `
       <rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW}" height="${h.toFixed(1)}" rx="3" fill="var(--accent)" opacity="0.55" />
       <circle cx="${cx.toFixed(1)}" cy="${expenseY(months[0].expense).toFixed(1)}" r="2.5" fill="var(--expense)" />
-      <circle cx="${cx.toFixed(1)}" cy="${incomeY(months[0].income).toFixed(1)}" r="2.5" fill="var(--income)" />
-      <circle cx="${cx.toFixed(1)}" cy="${investmentY(months[0].investment).toFixed(1)}" r="2.5" fill="var(--invest)" />
+      <circle cx="${cx.toFixed(1)}" cy="${incomeY(months[0].income).toFixed(1)}" r="4.5" fill="none" stroke="var(--income)" stroke-width="1.3" />
+      <circle cx="${cx.toFixed(1)}" cy="${investmentY(months[0].investment).toFixed(1)}" r="6.5" fill="none" stroke="var(--invest)" stroke-width="1.3" />
       <text x="${cx.toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="middle">${firstLabel}</text>`;
     return;
   }
@@ -2523,18 +2523,29 @@ function renderComboChart(svg, months) {
     bars += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--accent)" opacity="0.5" />`;
   });
 
-  const lineFor = (key, yOf, color) => {
+  // 지출/수입/투자는 서로 다른 스케일로 독립 정규화되는데, 어떤 지표가 그 기간 중 가장
+  // 크거나(항상 그래프 맨 위) 가장 작은(항상 맨 아래) 달은 다른 지표와 정확히 같은 자리에
+  // 찍힐 수 있다 (둘 다 각자 최댓값/최솟값이면 같은 y좌표). 그래서 실선/파선/점선으로 선을
+  // 구분하고, 점(dot)도 지출은 채운 원, 수입/투자는 속이 빈 원으로 그려 겹쳐도 서로 가리지
+  // 않게 한다.
+  const lineFor = (key, yOf, color, dashArray, dotRadius, hollowDot) => {
     const pts = months.map((m, i) => `${xOfCenter(i).toFixed(1)},${yOf(m[key]).toFixed(1)}`).join(" ");
-    const dots = months.map((m, i) => `<circle cx="${xOfCenter(i).toFixed(1)}" cy="${yOf(m[key]).toFixed(1)}" r="2" fill="${color}" />`).join("");
-    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round" />${dots}`;
+    const dots = months.map((m, i) => {
+      const cx = xOfCenter(i).toFixed(1), cy = yOf(m[key]).toFixed(1);
+      return hollowDot
+        ? `<circle cx="${cx}" cy="${cy}" r="${dotRadius}" fill="none" stroke="${color}" stroke-width="1.3" />`
+        : `<circle cx="${cx}" cy="${cy}" r="${dotRadius}" fill="${color}" />`;
+    }).join("");
+    const dash = dashArray ? ` stroke-dasharray="${dashArray}"` : "";
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round"${dash} />${dots}`;
   };
 
   svg.innerHTML = `
     <line x1="${PAD_L}" y1="${zeroYBal.toFixed(1)}" x2="${W - PAD_R}" y2="${zeroYBal.toFixed(1)}" stroke="var(--border)" stroke-width="1" />
     ${bars}
-    ${lineFor("expense", expenseY, "var(--expense)")}
-    ${lineFor("income", incomeY, "var(--income)")}
-    ${lineFor("investment", investmentY, "var(--invest)")}
+    ${lineFor("expense", expenseY, "var(--expense)", null, 2)}
+    ${lineFor("income", incomeY, "var(--income)", "4,2", 3.5, true)}
+    ${lineFor("investment", investmentY, "var(--invest)", "1,2.5", 5, true)}
     <text x="${xOfCenter(0).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="start">${firstLabel}</text>
     <text x="${xOfCenter(n - 1).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="end">${lastLabel}</text>`;
 }
