@@ -853,6 +853,16 @@ function iconForAssetCategoryLabel(label) {
   return ASSET_CATEGORY_ICON_BY_LABEL[label] || DEFAULT_ASSET_ICON;
 }
 
+// 분류명에 "제외"가 포함된 자산 분류는 자산 합계/투자 카테고리 목록/차트 하단 목록에서
+// 빼되, 자산 화면의 항목 입력/관리 목록에는 그대로 남겨서 계속 값을 기록할 수 있게 한다.
+function isExcludedAssetCategory(cat) {
+  return !!(cat && cat.label && cat.label.includes("제외"));
+}
+function excludedAssetItemIds() {
+  const excludedCatIds = new Set(state.assetCategories.filter(isExcludedAssetCategory).map(c => c.id));
+  return new Set(state.assetItems.filter(it => excludedCatIds.has(it.categoryId)).map(it => it.id));
+}
+
 // 지현 개인 가계부 카테고리
 const CATEGORIES_JIHYEON = {
   expense: [
@@ -901,9 +911,12 @@ const CATEGORIES_HYEONJE = {
 };
 
 // 투자 카테고리는 더 이상 고정 목록이 아니라, 자산 항목 관리에서 등록한 자산 분류를
-// 그대로 따른다 (분류 순서도 자산 분류 순서와 동일하게 유지된다).
+// 그대로 따른다 (분류 순서도 자산 분류 순서와 동일하게 유지된다). 분류명에 "제외"가
+// 포함된 분류는 투자 카테고리 목록에서 뺀다.
 function dynamicInvestmentCategories() {
-  return state.assetCategories.map(cat => ({ id: cat.id, label: cat.label, icon: cat.icon || DEFAULT_ASSET_ICON }));
+  return state.assetCategories
+    .filter(cat => !isExcludedAssetCategory(cat))
+    .map(cat => ({ id: cat.id, label: cat.label, icon: cat.icon || DEFAULT_ASSET_ICON }));
 }
 
 function categoriesForLedger(ledgerId) {
@@ -1917,6 +1930,7 @@ async function loadAssetMonthlyData() {
   // 자산(자산 잔액)은 가계부 토글과 무관하게 공통 자산(ASSET_LEDGER_KEY)의 월별 세부항목
   // 금액에서 가져온다. "{ledgerId}_structure" 문서는 월 데이터가 아니므로 걸러낸다.
   const assetPrefix = `${ASSET_LEDGER_KEY}_`;
+  const excludedIds = excludedAssetItemIds();
   try {
     const snap = await db.collection(ASSET_COLLECTION)
       .where(firebase.firestore.FieldPath.documentId(), ">=", assetPrefix)
@@ -1927,7 +1941,10 @@ async function loadAssetMonthlyData() {
       const monthKey = doc.id.slice(assetPrefix.length);
       if (!/^\d{4}-\d{2}$/.test(monthKey)) return; // structure 문서 제외
       const values = (doc.data() && doc.data().values) || {};
-      const amounts = Object.values(values).filter(v => v != null);
+      // 분류명에 "제외"가 포함된 분류의 항목은 자산 합계(자산 지표/차트)에서 뺀다.
+      const amounts = Object.entries(values)
+        .filter(([itemId, v]) => v != null && !excludedIds.has(itemId))
+        .map(([, v]) => v);
       if (!byMonth[monthKey]) byMonth[monthKey] = { monthKey, expense: 0, income: 0, investment: 0, asset: null, expenseByCat: {}, incomeByCat: {}, investmentByCat: {}, itemValues: {} };
       byMonth[monthKey].itemValues = values; // 그 달에 실제 입력된 항목별 값 (없는 항목은 renderChart에서 carry-forward)
       if (amounts.length === 0) return; // 값을 하나도 입력하지 않은 달은 asset을 null로 두어 이전 값을 이어간다(carry-forward)
@@ -1949,8 +1966,12 @@ function renderAssetsScreen() {
   const d = state.assetsDate;
   document.getElementById("assetsMonthLabel").textContent = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 
+  // 분류명에 "제외"가 포함된 분류의 항목은 자산 합계에서 뺀다 (목록에는 계속 표시됨).
+  const excludedIds = excludedAssetItemIds();
   let total = 0;
-  Object.values(state.assetMonthValues).forEach(v => { total += Number(v) || 0; });
+  Object.entries(state.assetMonthValues).forEach(([itemId, v]) => {
+    if (!excludedIds.has(itemId)) total += Number(v) || 0;
+  });
   document.getElementById("assetsMonthTotal").textContent = `${fmtNum(total)}원`;
 
   const listEl = document.getElementById("assetsEntryList");
@@ -2692,8 +2713,10 @@ function renderChart() {
             <div class="cat-entry-row"><span class="entry-memo">투자</span><span class="amt investment">₩${fmtNum(m.investment)}원</span></div>
           </div>`;
       } else if (metric === "balance") {
-        // 자산 분류별 금액만 표시 (분류 하위 항목은 표시하지 않는다)
+        // 자산 분류별 금액만 표시 (분류 하위 항목은 표시하지 않는다). 분류명에 "제외"가
+        // 포함된 분류는 목록에서 뺀다.
         const rows = state.assetCategories
+          .filter(cat => !isExcludedAssetCategory(cat))
           .map(cat => ({ label: cat.label, amt: m.assetByCat[cat.id] || 0 }))
           .filter(r => r.amt > 0)
           .sort((a, b) => b.amt - a.amt)
