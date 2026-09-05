@@ -281,8 +281,10 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center;
   }
   .chart-wrap{ width:100%; max-width:220px; margin:0 auto; }
-  .trend-chart-wrap{ width:100%; }
-  .trend-chart-wrap svg{ width:100%; height:auto; display:block; }
+  /* 표시할 달이 많아 최소 폭보다 넓어지면 svg 자체를 그만큼 넓게 그리고, 이 래퍼가
+     넘치는 만큼 가로 스크롤을 담당한다 (svg에 너비/뷰박스를 JS에서 직접 지정). */
+  .trend-chart-wrap{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .trend-chart-wrap svg{ display:block; max-width:none; }
   .chart-legend{
     display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
     margin-top:10px; font-size:11px; color: var(--text-dim);
@@ -616,9 +618,6 @@
 
   <!-- Screen 4: Chart -->
   <div class="screen" id="screen-chart">
-    <div class="dash-toggle">
-      <span class="dash-total mono" id="chartTotalLabel">0원</span>
-    </div>
     <div class="assets-daterange-row">
       <select id="chartStartSelect" class="assets-month-select"></select>
       <span class="assets-daterange-sep">~</span>
@@ -635,7 +634,7 @@
     </div>
     <div class="dash-card">
       <div class="trend-chart-wrap">
-        <svg id="chartSvg" viewBox="0 0 320 180" preserveAspectRatio="none"></svg>
+        <svg id="chartSvg" viewBox="0 0 320 180" width="320" height="180"></svg>
       </div>
       <div class="chart-legend" id="chartLegend" style="display:none;">
         <span class="legend-item"><i style="background:var(--accent)"></i>자산</span>
@@ -2413,8 +2412,31 @@ function valueLabelY(y, plotTop) {
 // 지표별 선 스타일을 한 곳에서 정의한다 (지출=실선, 수입=파선, 투자=점선, 자산=실선).
 const METRIC_DASH = { expense: null, income: "4,2", investment: "1,2.5", balance: null };
 
-function renderTrendChart(svg, series, metric) {
-  const W = 320, H = 180;
+// 달마다 값 라벨/월 라벨이 겹치지 않을 최소 폭. 화면에 다 들어오면 그 너비를 꽉 채우고,
+// 달 수가 많아 최소 폭보다 좁아지면 그만큼 실제 svg를 넓게 그려서 가로 스크롤로 보게 한다.
+const MIN_CHART_MONTH_WIDTH = 50;
+function computeChartWidth(svgEl, monthCount) {
+  const wrap = svgEl.parentElement;
+  const containerWidth = wrap.clientWidth || 320;
+  const neededWidth = Math.max(monthCount, 1) * MIN_CHART_MONTH_WIDTH;
+  return Math.max(containerWidth, neededWidth);
+}
+function setChartCanvasSize(svg, width, height) {
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+}
+// 맨 처음/끝 지점의 라벨은 그래프 바깥으로 잘리지 않도록 안쪽 방향으로 자라게 하고,
+// 중간 지점은 점 위에 가운데 정렬한다 (월 라벨과 값 라벨 모두 이 규칙을 쓴다).
+function edgeAwareAnchor(i, n) {
+  if (n <= 1) return "middle";
+  if (i === 0) return "start";
+  if (i === n - 1) return "end";
+  return "middle";
+}
+
+function renderTrendChart(svg, series, metric, chartWidth) {
+  const W = chartWidth || 320, H = 180;
   const PAD_L = 34, PAD_R = 8, PAD_TOP = 18, PAD_BOTTOM = 22;
   const plotH = H - PAD_TOP - PAD_BOTTOM;
   const color = metric === "expense" ? "var(--expense)"
@@ -2440,6 +2462,8 @@ function renderTrendChart(svg, series, metric) {
         <text x="${(PAD_L - 6).toFixed(1)}" y="${(y + 2.5).toFixed(1)}" font-size="7" fill="var(--text-dim)" text-anchor="end">${fmtCompact(v)}</text>`;
     }).join("")}`;
 
+  setChartCanvasSize(svg, W, H);
+
   if (n === 1) {
     const y = yOf(series[0].value);
     svg.innerHTML = `
@@ -2453,14 +2477,18 @@ function renderTrendChart(svg, series, metric) {
   const stepX = (W - PAD_L - PAD_R) / (n - 1);
   const xOf = (i) => PAD_L + i * stepX;
   const zeroY = yOf(0);
-  const lastLabel = `${Number(series[n - 1].monthKey.split("-")[1])}월`;
 
   const points = series.map((s, i) => `${xOf(i).toFixed(1)},${yOf(s.value).toFixed(1)}`).join(" ");
   const areaPoints = `${xOf(0).toFixed(1)},${zeroY.toFixed(1)} ${points} ${xOf(n - 1).toFixed(1)},${zeroY.toFixed(1)}`;
   const dots = series.map((s, i) => `<circle cx="${xOf(i).toFixed(1)}" cy="${yOf(s.value).toFixed(1)}" r="2.5" fill="${color}" />`).join("");
   const valueLabels = series.map((s, i) => {
     const x = xOf(i), y = yOf(s.value);
-    return `<text x="${x.toFixed(1)}" y="${valueLabelY(y, PAD_TOP).toFixed(1)}" font-size="7" font-weight="600" fill="${color}" text-anchor="middle">${fmtNum(s.value)}</text>`;
+    return `<text x="${x.toFixed(1)}" y="${valueLabelY(y, PAD_TOP).toFixed(1)}" font-size="7" font-weight="600" fill="${color}" text-anchor="${edgeAwareAnchor(i, n)}">${fmtNum(s.value)}</text>`;
+  }).join("");
+  // 달 수만큼 폭을 확보해뒀기 때문에(MIN_CHART_MONTH_WIDTH) 처음/끝뿐 아니라 매달 라벨을 표시한다.
+  const monthLabels = series.map((s, i) => {
+    const label = `${Number(s.monthKey.split("-")[1])}월`;
+    return `<text x="${xOf(i).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="${edgeAwareAnchor(i, n)}">${label}</text>`;
   }).join("");
 
   const dashAttr = METRIC_DASH[metric] ? ` stroke-dasharray="${METRIC_DASH[metric]}"` : "";
@@ -2471,14 +2499,13 @@ function renderTrendChart(svg, series, metric) {
     <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"${dashAttr} />
     ${dots}
     ${valueLabels}
-    <text x="${xOf(0).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="start">${firstLabel}</text>
-    <text x="${xOf(n - 1).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="end">${lastLabel}</text>`;
+    ${monthLabels}`;
 }
 
 // "전체" 모드: 잔고는 막대로, 지출/수입/투자는 꺾은선으로 겹쳐 그린다.
 // 각 지표는 서로 스케일이 크게 달라 자기 자신의 최소/최대값 기준으로 각자 정규화한다.
-function renderComboChart(svg, months) {
-  const W = 320, H = 180;
+function renderComboChart(svg, months, chartWidth) {
+  const W = chartWidth || 320, H = 180;
   const PAD_L = 8, PAD_R = 8, PAD_TOP = 18, PAD_BOTTOM = 22;
   const plotH = H - PAD_TOP - PAD_BOTTOM;
   const n = months.length;
@@ -2496,7 +2523,8 @@ function renderComboChart(svg, months) {
   const investmentY = scaleFor("investment");
 
   const firstLabel = `${Number(months[0].monthKey.split("-")[1])}월`;
-  const lastLabel = `${Number(months[n - 1].monthKey.split("-")[1])}월`;
+
+  setChartCanvasSize(svg, W, H);
 
   if (n === 1) {
     const cx = W / 2;
@@ -2542,14 +2570,19 @@ function renderComboChart(svg, months) {
     return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round"${dash} />${dots}`;
   };
 
+  // 달 수만큼 폭을 확보해뒀기 때문에(MIN_CHART_MONTH_WIDTH) 처음/끝뿐 아니라 매달 라벨을 표시한다.
+  const monthLabels = months.map((m, i) => {
+    const label = `${Number(m.monthKey.split("-")[1])}월`;
+    return `<text x="${xOfCenter(i).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="${edgeAwareAnchor(i, n)}">${label}</text>`;
+  }).join("");
+
   svg.innerHTML = `
     <line x1="${PAD_L}" y1="${zeroYBal.toFixed(1)}" x2="${W - PAD_R}" y2="${zeroYBal.toFixed(1)}" stroke="var(--border)" stroke-width="1" />
     ${bars}
     ${lineFor("expense", expenseY, "var(--expense)")}
     ${lineFor("income", incomeY, "var(--income)")}
     ${lineFor("investment", investmentY, "var(--invest)")}
-    <text x="${xOfCenter(0).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="start">${firstLabel}</text>
-    <text x="${xOfCenter(n - 1).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="end">${lastLabel}</text>`;
+    ${monthLabels}`;
 }
 
 function renderChart() {
@@ -2561,15 +2594,12 @@ function renderChart() {
   const chartEl = document.getElementById("chartSvg");
   const emptyMsg = document.getElementById("chartEmpty");
   const listEl = document.getElementById("chartList");
-  const totalLabel = document.getElementById("chartTotalLabel");
   const legendEl = document.getElementById("chartLegend");
 
   if (state.assetsMonths.length === 0 || !state.chartStartMonth || !state.chartEndMonth) {
     emptyMsg.style.display = "block";
     chartEl.innerHTML = "";
     legendEl.style.display = "none";
-    totalLabel.textContent = "0원";
-    totalLabel.className = "dash-total mono";
     listEl.innerHTML = "";
     return;
   }
@@ -2610,26 +2640,14 @@ function renderChart() {
   fullRange.forEach(m => { byKeyFull[m.monthKey] = m; });
   const months = buildMonthRange(state.chartStartMonth, state.chartEndMonth).map(key => byKeyFull[key]);
 
+  const chartWidth = computeChartWidth(chartEl, months.length);
   if (metric === "all") {
     legendEl.style.display = "flex";
-    const latest = months[months.length - 1].balance;
-    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
-    totalLabel.className = "dash-total mono";
-    renderComboChart(chartEl, months);
+    renderComboChart(chartEl, months, chartWidth);
   } else {
     legendEl.style.display = "none";
     const series = months.map(m => ({ monthKey: m.monthKey, value: m[metric] }));
-    const latest = series[series.length - 1].value;
-    if (metric === "balance") {
-      totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
-      totalLabel.className = "dash-total mono";
-    } else {
-      // 지출/수입/투자는 하단 목록과 동일하게 항상 -/+/₩ 기호와 해당 색상으로 표시한다.
-      const metricSign = metric === "income" ? "+" : metric === "investment" ? "₩" : "-";
-      totalLabel.textContent = `${metricSign}${fmtNum(Math.abs(latest))}원`;
-      totalLabel.className = `dash-total mono ${metric}`;
-    }
-    renderTrendChart(chartEl, series, metric);
+    renderTrendChart(chartEl, series, metric, chartWidth);
   }
 
   listEl.innerHTML = months.slice().reverse().map(m => {
