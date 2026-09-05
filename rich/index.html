@@ -731,6 +731,9 @@ const COLLECTION = "ledger_v1"; // 문서: {ledgerId}_{YYYY-MM} (예: jihyeon_20
 const ASSET_COLLECTION = "asset_v1"; // 자산 분류/세부항목 구조 및 월별 금액 저장
 // 문서: {ledgerId}_structure → { categories: [{id,label}], items: [{id,categoryId,label}] }
 //       {ledgerId}_{YYYY-MM} → { values: { [itemId]: amount } }
+// 자산은 공용/지현/현제 가계부와 무관하게 하나만 관리한다 (가계부 토글의 영향을 받지 않음).
+// 기존에 "지현" 가계부에서 입력해둔 데이터를 그대로 공통 자산으로 이어서 쓴다.
+const ASSET_LEDGER_KEY = "jihyeon";
 
 /* ====================== 상수 정의 ====================== */
 const LEDGERS = [
@@ -935,8 +938,15 @@ function listenAssetStructure(ledgerId) {
   if (state.assetStructureUnsub) state.assetStructureUnsub();
   state.assetStructureUnsub = db.collection(ASSET_COLLECTION).doc(assetStructureDocId(ledgerId)).onSnapshot((snap) => {
     const data = snap.data();
+    const prevIds = new Set(state.assetCategories.map(c => c.id));
     state.assetCategories = (data && data.categories) || [];
     state.assetItems = (data && data.items) || [];
+    // 처음 보는(=새로 생긴) 분류만 기본적으로 펼쳐서 보여준다. 이미 있던 분류는
+    // 사용자가 접거나 펼친 상태를 그대로 유지한다 (첫 로드 때는 전부 "새로 생긴" 것으로
+    // 취급되어 모든 분류가 펼쳐진 상태로 시작한다).
+    state.assetCategories.forEach(cat => {
+      if (!prevIds.has(cat.id)) state.assetExpandedCats.add(cat.id);
+    });
     renderAssetsScreen();
   }, (err) => {
     console.error("Firestore listen error (asset structure):", err);
@@ -957,7 +967,7 @@ function listenAssetMonthValues(ledgerId, dateObj) {
 }
 
 async function saveAssetStructure() {
-  await db.collection(ASSET_COLLECTION).doc(assetStructureDocId(state.currentLedger)).set({
+  await db.collection(ASSET_COLLECTION).doc(assetStructureDocId(ASSET_LEDGER_KEY)).set({
     categories: state.assetCategories,
     items: state.assetItems,
   });
@@ -997,10 +1007,7 @@ function switchLedger(id) {
   state.dashExpandedCats = new Set();
   state.calEntries = [];
   state.dashEntries = [];
-  state.assetCategories = [];
-  state.assetItems = [];
-  state.assetMonthValues = {};
-  state.assetExpandedCats = new Set();
+  // 자산(분류/항목/월별 금액)은 가계부와 무관한 공통 데이터라 가계부를 바꿔도 건드리지 않는다.
   // 가계부가 바뀌면 다음 로드 시 그 가계부 기준으로 기본 범위를 재계산한다.
   state.chartStartMonth = null;
   state.chartEndMonth = null;
@@ -1020,9 +1027,6 @@ function switchLedger(id) {
   renderDashboard();
   listenCalendarMonth(id, state.calDate);
   listenDashboardMonth(id, state.dashDate);
-  renderAssetsScreen();
-  listenAssetStructure(id);
-  listenAssetMonthValues(id, state.assetsDate);
   const activeScreenId = document.querySelector(".screen.active").id;
   if (activeScreenId === "screen-chart") loadAssetMonthlyData();
 }
@@ -1046,12 +1050,18 @@ document.querySelectorAll(".ledger-toggle-btn").forEach(btn => {
 });
 
 /* ====================== 탭 전환 ====================== */
+// 자산 화면은 가계부와 무관한 공통 데이터라 가계부 토글이 필요 없으므로 숨긴다.
+function updateLedgerToggleVisibility(screenName) {
+  document.getElementById("ledgerToggle").style.display = screenName === "assets" ? "none" : "flex";
+}
+
 document.querySelectorAll(".tabbtn[data-screen]").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tabbtn[data-screen]").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById("screen-" + btn.dataset.screen).classList.add("active");
+    updateLedgerToggleVisibility(btn.dataset.screen);
     if (btn.dataset.screen === "chart") loadAssetMonthlyData();
     // 대시보드는 숨겨져 있는 동안 그려졌을 수 있어(% 라벨 실측이 부정확) 보일 때 다시 그린다.
     if (btn.dataset.screen === "dashboard") renderDashboard();
@@ -1748,16 +1758,17 @@ async function loadAssetMonthlyData() {
     console.error("가계부 데이터 로드 실패:", err);
   }
 
-  // 자산(잔고)은 asset_v1의 월별 세부항목 금액 합계에서 가져온다.
-  // "{ledgerId}_structure" 문서는 월 데이터가 아니므로 걸러낸다.
+  // 자산(잔고)은 가계부 토글과 무관하게 공통 자산(ASSET_LEDGER_KEY)의 월별 세부항목
+  // 금액 합계에서 가져온다. "{ledgerId}_structure" 문서는 월 데이터가 아니므로 걸러낸다.
+  const assetPrefix = `${ASSET_LEDGER_KEY}_`;
   try {
     const snap = await db.collection(ASSET_COLLECTION)
-      .where(firebase.firestore.FieldPath.documentId(), ">=", prefix)
-      .where(firebase.firestore.FieldPath.documentId(), "<", prefix + "")
+      .where(firebase.firestore.FieldPath.documentId(), ">=", assetPrefix)
+      .where(firebase.firestore.FieldPath.documentId(), "<", assetPrefix + "")
       .get();
 
     snap.forEach(doc => {
-      const monthKey = doc.id.slice(prefix.length);
+      const monthKey = doc.id.slice(assetPrefix.length);
       if (!/^\d{4}-\d{2}$/.test(monthKey)) return; // structure 문서 제외
       const values = (doc.data() && doc.data().values) || {};
       const amounts = Object.values(values).filter(v => v != null);
@@ -1862,7 +1873,7 @@ function renderAssetsScreen() {
       state.assetMonthValues[itemId] = value;
       renderAssetsScreen();
       try {
-        await saveAssetValue(state.currentLedger, monthKeyOf(state.assetsDate), itemId, value);
+        await saveAssetValue(ASSET_LEDGER_KEY, monthKeyOf(state.assetsDate), itemId, value);
         flashSync();
       } catch (err) {
         console.error("자산 값 저장 실패:", err);
@@ -1876,13 +1887,13 @@ document.getElementById("assetsPrevMonth").addEventListener("click", () => {
   state.assetsDate = new Date(state.assetsDate.getFullYear(), state.assetsDate.getMonth() - 1, 1);
   state.assetMonthValues = {};
   renderAssetsScreen();
-  listenAssetMonthValues(state.currentLedger, state.assetsDate);
+  listenAssetMonthValues(ASSET_LEDGER_KEY, state.assetsDate);
 });
 document.getElementById("assetsNextMonth").addEventListener("click", () => {
   state.assetsDate = new Date(state.assetsDate.getFullYear(), state.assetsDate.getMonth() + 1, 1);
   state.assetMonthValues = {};
   renderAssetsScreen();
-  listenAssetMonthValues(state.currentLedger, state.assetsDate);
+  listenAssetMonthValues(ASSET_LEDGER_KEY, state.assetsDate);
 });
 document.getElementById("manageAssetBtn").addEventListener("click", openAssetManageModal);
 
@@ -2731,12 +2742,13 @@ searchInput.addEventListener("input", renderSearchResults);
 
 /* ====================== 초기화 ====================== */
 renderLedgerToggle();
+updateLedgerToggleVisibility("calendar");
 updateDashTypeVisibility();
 renderMonthSummary();
 listenCalendarMonth(state.currentLedger, state.calDate);
 listenDashboardMonth(state.currentLedger, state.dashDate);
-listenAssetStructure(state.currentLedger);
-listenAssetMonthValues(state.currentLedger, state.assetsDate);
+listenAssetStructure(ASSET_LEDGER_KEY);
+listenAssetMonthValues(ASSET_LEDGER_KEY, state.assetsDate);
 </script>
 </body>
 </html>
