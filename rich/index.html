@@ -223,6 +223,9 @@
     padding: 4px 16px 18px;
   }
   .dash-total{ font-size:24px; font-weight:700; color: var(--text); line-height:1.1; }
+  .dash-total.expense{ color: var(--expense); }
+  .dash-total.income{ color: var(--income); }
+  .dash-total.investment{ color: var(--invest); }
   .dash-type-toggle{
     display:flex; gap:4px; background: var(--card); border:1px solid var(--border);
     border-radius:999px; padding:4px; flex-shrink:0;
@@ -1671,7 +1674,10 @@ function renderDashboard() {
 
   const filtered = applyPayerFilter(state.dashEntries.filter(e => e.type === state.dashType));
   const totalAmount = filtered.reduce((sum, e) => sum + Number(e.amount), 0);
-  document.getElementById("dashTotal").textContent = `${fmtNum(totalAmount)}원`;
+  const sign = state.dashType === "income" ? "+" : state.dashType === "investment" ? "₩" : "-";
+  const dashTotalEl = document.getElementById("dashTotal");
+  dashTotalEl.textContent = `${sign}${fmtNum(totalAmount)}원`;
+  dashTotalEl.className = `dash-total mono ${state.dashType}`;
 
   // 지출 대시보드에서는 도넛의 100%가 "전체 수입"이 되도록, 남은 돈(수입-지출)을 별도 조각으로 채운다.
   // 지현/현제는 수입 내역이 없으므로 고정 용돈(50만원)을 기준으로 삼는다.
@@ -1714,8 +1720,6 @@ function renderDashboard() {
     emptyMsg.style.display = "none";
     renderDonutChart(chartEl, calloutsEl, catsWithAmount, totals, donutDenom, state.dashType, remainingShare);
   }
-
-  const sign = state.dashType === "income" ? "+" : state.dashType === "investment" ? "₩" : "-";
 
   document.getElementById("catList").innerHTML = catsWithAmount.map(c => {
     const expanded = state.dashExpandedCats.has(c.id);
@@ -2496,6 +2500,7 @@ function renderChart() {
     chartEl.innerHTML = "";
     legendEl.style.display = "none";
     totalLabel.textContent = "0원";
+    totalLabel.className = "dash-total mono";
     listEl.innerHTML = "";
     return;
   }
@@ -2540,12 +2545,21 @@ function renderChart() {
     legendEl.style.display = "flex";
     const latest = months[months.length - 1].balance;
     totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
+    totalLabel.className = "dash-total mono";
     renderComboChart(chartEl, months);
   } else {
     legendEl.style.display = "none";
     const series = months.map(m => ({ monthKey: m.monthKey, value: m[metric] }));
     const latest = series[series.length - 1].value;
-    totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
+    if (metric === "balance") {
+      totalLabel.textContent = `${latest < 0 ? "-" : ""}${fmtNum(Math.abs(latest))}원`;
+      totalLabel.className = "dash-total mono";
+    } else {
+      // 지출/수입/투자는 하단 목록과 동일하게 항상 -/+/₩ 기호와 해당 색상으로 표시한다.
+      const metricSign = metric === "income" ? "+" : metric === "investment" ? "₩" : "-";
+      totalLabel.textContent = `${metricSign}${fmtNum(Math.abs(latest))}원`;
+      totalLabel.className = `dash-total mono ${metric}`;
+    }
     renderTrendChart(chartEl, series, metric);
   }
 
