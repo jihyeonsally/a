@@ -256,6 +256,7 @@
 
   #assetOwnerFilter.chip-row{ gap:6px; flex:1; justify-content:flex-end; flex-wrap:wrap; }
   #assetOwnerFilter .chip{ padding:6px 10px; font-size:12px; }
+  #manageAssetBtn{ padding:6px 10px; font-size:12px; line-height:1; flex-shrink:0; }
 
   .assets-range-row{ padding: 0 16px 16px; }
   #chartMetricFilter.chip-row{ gap:6px; }
@@ -571,6 +572,13 @@
 
   <!-- Screen 3: Asset entries (월별 자산 내역 목록) -->
   <div class="screen" id="screen-assets">
+    <div class="month-nav">
+      <h2 id="assetsMonthLabel"></h2>
+      <div class="navbtns">
+        <button class="navbtn" id="assetsPrevMonth">‹</button>
+        <button class="navbtn" id="assetsNextMonth">›</button>
+      </div>
+    </div>
     <div class="dash-toggle">
       <span class="dash-total mono" id="assetsMonthTotal">0원</span>
       <div class="chip-row" id="assetOwnerFilter">
@@ -579,14 +587,7 @@
         <button class="chip" data-owner="jihyeon">지현</button>
         <button class="chip" data-owner="hyeonje">현제</button>
       </div>
-      <button class="chip" id="manageAssetBtn">관리</button>
-    </div>
-    <div class="month-nav">
-      <h2 id="assetsMonthLabel"></h2>
-      <div class="navbtns">
-        <button class="navbtn" id="assetsPrevMonth">‹</button>
-        <button class="navbtn" id="assetsNextMonth">›</button>
-      </div>
+      <button class="chip" id="manageAssetBtn">⚙️</button>
     </div>
     <div class="day-detail" style="display:block; margin:12px 16px 20px;">
       <div id="assetsEntryList"></div>
