@@ -333,6 +333,12 @@
   .cat-entry-row .amt.expense{ color: var(--expense); }
   .cat-entry-row .amt.income{ color: var(--income); }
   .cat-entry-row .amt.investment{ color: var(--invest); }
+  .owner-tag{
+    flex-shrink:0; font-size:11px; font-weight:700; padding:2px 6px; border-radius:6px;
+  }
+  .owner-tag.owner-shared{ color:#D97757; background: rgba(217,119,87,0.14); }
+  .owner-tag.owner-jihyeon{ color:#4B8060; background: rgba(75,128,96,0.14); }
+  .owner-tag.owner-hyeonje{ color:#5B7FA6; background: rgba(91,127,166,0.14); }
 
   .value-cell{ display:inline-flex; align-items:center; flex-shrink:0; }
   .cell-display{
@@ -1850,8 +1856,10 @@ function renderAssetsScreen() {
     const itemsHtml = items.map(it => {
       const val = state.assetMonthValues[it.id];
       const displayText = val != null ? fmtNum(val) : "-";
+      const owner = it.ownerLedger || "shared";
       return `
         <div class="cat-entry-row">
+          <span class="owner-tag owner-${owner}">${LEDGER_SHORT_LABEL[owner]}</span>
           <span class="entry-memo">${escapeHtml(it.label)}</span>
           <span class="value-cell" data-item="${it.id}">
             <span class="cell-display mono">${displayText}</span>
