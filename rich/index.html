@@ -94,6 +94,7 @@
     cursor:pointer; font-size:15px; flex-shrink:0;
   }
   .search-btn:hover{ background: var(--accent-soft); }
+  .asset-add-btns{ display:flex; gap:8px; flex-shrink:0; }
   .summary-row{
     display:flex; flex-wrap:nowrap; align-items:center; justify-content:space-between;
     gap:8px; padding: 3px 0; font-size:15px; overflow:hidden;
@@ -536,7 +537,10 @@
     </div>
     <div class="dash-toggle">
       <span class="dash-total mono" id="assetsMonthTotal">0원</span>
-      <button class="search-btn" id="assetsAddBtn" aria-label="자산 추가">+</button>
+      <div class="asset-add-btns">
+        <button class="chip" id="addAssetCategoryBtn">+ 분류</button>
+        <button class="chip" id="addAssetItemBtn">+ 항목</button>
+      </div>
     </div>
     <div class="day-detail" style="display:block; margin:12px 16px 20px;">
       <div id="assetsEntryList"></div>
@@ -667,15 +671,19 @@
     <div class="sheet-header">
       <button class="close-btn" id="closeAssetItemSheet">✕</button>
       <div class="sheet-handle"></div>
-      <h3>자산 항목 추가</h3>
+      <h3 id="assetItemSheetTitle">분류 추가</h3>
     </div>
     <div class="sheet-body">
-      <div class="field-label">분류</div>
-      <div class="chip-row" id="assetCategoryChips"></div>
-      <input type="text" id="newAssetCategoryInput" placeholder="새 분류명 입력 (예: 국내주식)" autocomplete="off" style="margin-top:8px;" />
-
-      <div class="field-label">세부항목명</div>
-      <input type="text" id="newAssetItemInput" placeholder="예: 현제 토스" autocomplete="off" />
+      <div id="assetCategoryModeBody">
+        <div class="field-label">분류명</div>
+        <input type="text" id="newAssetCategoryInput" placeholder="분류명 입력" autocomplete="off" />
+      </div>
+      <div id="assetItemModeBody" style="display:none;">
+        <div class="field-label">분류</div>
+        <div class="chip-row" id="assetCategoryChips"></div>
+        <div class="field-label">세부항목명</div>
+        <input type="text" id="newAssetItemInput" placeholder="세부항목명 입력" autocomplete="off" />
+      </div>
     </div>
     <div class="sheet-footer">
       <button class="save-btn" id="saveAssetItemBtn" disabled>저장</button>
@@ -850,7 +858,7 @@ const state = {
   assetMonthValues: {}, // { [itemId]: amount } 현재 보고 있는 월의 세부항목별 최신 금액
   assetStructureUnsub: null,
   assetValuesUnsub: null,
-  assetItemModal: { categoryId: null, newCategoryName: "", itemName: "" },
+  assetItemModal: { mode: "category", categoryId: null, newCategoryName: "", itemName: "" },
   assetsMonths: [],  // [{ monthKey, expense, income, investment, asset }] 오름차순, 현재 가계부의 월별 데이터 (전체 기간, 차트용)
   chartMetric: "all", // 차트 화면 하단 토글 ("all" | "balance" | "expense" | "income" | "investment")
   chartStartMonth: null, // 차트 화면 표시 범위 시작 "YYYY-MM"
@@ -1794,39 +1802,52 @@ document.getElementById("assetsNextMonth").addEventListener("click", () => {
   renderAssetsScreen();
   listenAssetMonthValues(state.currentLedger, state.assetsDate);
 });
-document.getElementById("assetsAddBtn").addEventListener("click", openAssetItemModal);
+document.getElementById("addAssetCategoryBtn").addEventListener("click", openAssetCategoryModal);
+document.getElementById("addAssetItemBtn").addEventListener("click", openAssetItemModal);
 
 /* ---------- 자산 분류/세부항목 추가 모달 ---------- */
+// mode: "category" (분류만 추가) | "item" (기존 분류를 골라 그 하위 세부항목 추가)
 function renderAssetCategoryChips() {
   const wrap = document.getElementById("assetCategoryChips");
-  const existingChips = state.assetCategories.map(c => `
+  wrap.innerHTML = state.assetCategories.map(c => `
     <button class="chip ${state.assetItemModal.categoryId === c.id ? "active" : ""}" data-cat="${c.id}">${escapeHtml(c.label)}</button>
   `).join("");
-  const newChip = `<button class="chip ${state.assetItemModal.categoryId === null ? "active" : ""}" data-cat="__new__">+ 새 분류</button>`;
-  wrap.innerHTML = existingChips + newChip;
 
   wrap.querySelectorAll(".chip").forEach(chip => {
     chip.addEventListener("click", () => {
-      const catId = chip.dataset.cat;
-      state.assetItemModal.categoryId = catId === "__new__" ? null : catId;
+      state.assetItemModal.categoryId = chip.dataset.cat;
       renderAssetCategoryChips();
-      document.getElementById("newAssetCategoryInput").style.display = state.assetItemModal.categoryId === null ? "block" : "none";
       updateAssetItemSaveEnabled();
     });
   });
 }
 
 function updateAssetItemSaveEnabled() {
-  const hasCategory = !!(state.assetItemModal.categoryId || state.assetItemModal.newCategoryName.trim());
-  const hasItemName = !!state.assetItemModal.itemName.trim();
-  document.getElementById("saveAssetItemBtn").disabled = !(hasCategory && hasItemName);
+  const enabled = state.assetItemModal.mode === "category"
+    ? !!state.assetItemModal.newCategoryName.trim()
+    : !!(state.assetItemModal.categoryId && state.assetItemModal.itemName.trim());
+  document.getElementById("saveAssetItemBtn").disabled = !enabled;
+}
+
+function openAssetCategoryModal() {
+  state.assetItemModal = { mode: "category", categoryId: null, newCategoryName: "", itemName: "" };
+  document.getElementById("assetItemSheetTitle").textContent = "분류 추가";
+  document.getElementById("assetCategoryModeBody").style.display = "block";
+  document.getElementById("assetItemModeBody").style.display = "none";
+  document.getElementById("newAssetCategoryInput").value = "";
+  updateAssetItemSaveEnabled();
+  document.getElementById("assetItemOverlay").classList.add("show");
 }
 
 function openAssetItemModal() {
-  state.assetItemModal = { categoryId: null, newCategoryName: "", itemName: "" };
-  const newCatInput = document.getElementById("newAssetCategoryInput");
-  newCatInput.value = "";
-  newCatInput.style.display = "block";
+  if (state.assetCategories.length === 0) {
+    alert("먼저 분류를 추가해주세요.");
+    return;
+  }
+  state.assetItemModal = { mode: "item", categoryId: state.assetCategories[0].id, newCategoryName: "", itemName: "" };
+  document.getElementById("assetItemSheetTitle").textContent = "항목 추가";
+  document.getElementById("assetCategoryModeBody").style.display = "none";
+  document.getElementById("assetItemModeBody").style.display = "block";
   document.getElementById("newAssetItemInput").value = "";
   renderAssetCategoryChips();
   updateAssetItemSaveEnabled();
@@ -1856,14 +1877,14 @@ document.getElementById("saveAssetItemBtn").addEventListener("click", async () =
   btn.disabled = true;
   btn.textContent = "저장 중...";
   try {
-    let categoryId = state.assetItemModal.categoryId;
-    if (!categoryId) {
-      categoryId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+    if (state.assetItemModal.mode === "category") {
+      const categoryId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
       state.assetCategories.push({ id: categoryId, label: state.assetItemModal.newCategoryName.trim() });
+    } else {
+      const itemId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+      state.assetItems.push({ id: itemId, categoryId: state.assetItemModal.categoryId, label: state.assetItemModal.itemName.trim() });
+      state.assetExpandedCats.add(state.assetItemModal.categoryId); // 추가한 분류는 바로 펼쳐서 보여준다
     }
-    const itemId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
-    state.assetItems.push({ id: itemId, categoryId, label: state.assetItemModal.itemName.trim() });
-    state.assetExpandedCats.add(categoryId); // 추가한 분류는 바로 펼쳐서 보여준다
     await saveAssetStructure();
     renderAssetsScreen();
     closeAssetItemModal();
@@ -1876,7 +1897,6 @@ document.getElementById("saveAssetItemBtn").addEventListener("click", async () =
   }
 });
 
-/* ---------- 차트 화면 ---------- */
 /* ---------- 차트 화면 ---------- */
 
 // y좌표가 그래프 위쪽 가장자리에 너무 가까우면 값 라벨을 점 아래로 내려서 잘리지 않게 한다.
