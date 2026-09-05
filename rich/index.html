@@ -219,20 +219,23 @@
 
   /* ---------- Dashboard ---------- */
   .dash-toggle{
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
     padding: 4px 16px 18px;
   }
-  .dash-total{ font-size:24px; font-weight:700; color: var(--text); line-height:1.1; }
+  /* 좁은 화면에서도 금액과 토글 버튼이 한 줄에 다 들어오도록, 금액은 줄바꿈되지 않게
+     고정하고(원 앞에서 끊어지는 걸 방지) 토글 버튼도 촘촘하게 줄인다. */
+  .dash-total{ font-size:20px; font-weight:700; color: var(--text); line-height:1.1; white-space:nowrap; }
   .dash-total.expense{ color: var(--expense); }
   .dash-total.income{ color: var(--income); }
   .dash-total.investment{ color: var(--invest); }
   .dash-type-toggle{
-    display:flex; gap:4px; background: var(--card); border:1px solid var(--border);
-    border-radius:999px; padding:4px; flex-shrink:0;
+    display:flex; gap:2px; background: var(--card); border:1px solid var(--border);
+    border-radius:999px; padding:3px; flex-shrink:0;
   }
   .dash-type-toggle button{
-    border:none; background:none; border-radius:999px; padding: 7px 14px;
-    font-family: inherit; font-weight:700; font-size:12px; color: var(--text-dim); cursor:pointer;
+    border:none; background:none; border-radius:999px; padding: 6px 9px;
+    font-family: inherit; font-weight:700; font-size:11px; color: var(--text-dim); cursor:pointer;
+    white-space:nowrap;
   }
   .dash-type-toggle button.active.expense{ background: var(--expense); color:#fff; }
   .dash-type-toggle button.active.income{ background: var(--income); color:#fff; }
@@ -257,8 +260,9 @@
   }
   .assets-daterange-sep{ color: var(--text-dim); font-weight:600; flex-shrink:0; }
 
-  #assetOwnerFilter.chip-row{ gap:6px; flex:1; justify-content:flex-end; flex-wrap:wrap; }
-  #assetOwnerFilter .chip{ padding:6px 10px; font-size:12px; }
+  /* 좁은 화면에서도 4개 필터 칩이 한 줄에 다 들어오도록 촘촘하게 줄이고, 줄바꿈은 막는다. */
+  #assetOwnerFilter.chip-row{ gap:4px; flex:1; justify-content:flex-end; flex-wrap:nowrap; }
+  #assetOwnerFilter .chip{ padding:5px 8px; font-size:11px; white-space:nowrap; }
   #manageAssetBtn{
     background:none; border:none; padding:4px; font-size:20px; line-height:1;
     cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center;
@@ -599,6 +603,7 @@
       <div class="navbtns">
         <button class="navbtn" id="assetsPrevMonth">‹</button>
         <button class="navbtn" id="assetsNextMonth">›</button>
+        <button id="manageAssetBtn">⚙️</button>
       </div>
     </div>
     <div class="dash-toggle">
@@ -609,7 +614,6 @@
         <button class="chip" data-owner="hyeonje">현제</button>
         <button class="chip" data-owner="shared">공용</button>
       </div>
-      <button id="manageAssetBtn">⚙️</button>
     </div>
     <div class="day-detail" style="display:block; margin:12px 16px 20px;">
       <div id="assetsEntryList"></div>
