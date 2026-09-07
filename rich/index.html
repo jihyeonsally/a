@@ -279,7 +279,13 @@
   }
   /* 자산 화면에서는 연-월과 총액 글자 크기를 서로 맞춘다. */
   #assetsMonthLabel{ font-size:18px; }
-  #assetsMonthTotal{ font-size:18px; }
+  /* 총액은 평소엔 숨겨두고(글자색 투명), 꾹 누르고 있는 동안만 잠깐 보이게 한다. */
+  #assetsMonthTotal{
+    font-size:18px; color: transparent !important; cursor:pointer; user-select:none;
+    -webkit-user-select:none; -webkit-touch-callout:none; touch-action:manipulation;
+    transition: color .1s ease;
+  }
+  #assetsMonthTotal.revealed{ color: var(--text) !important; }
 
   .assets-range-row{ padding: 0 16px 16px; }
   #chartMetricFilter.chip-row{ gap:6px; }
@@ -621,16 +627,6 @@
 
   <!-- Screen 3: Asset entries (월별 자산 내역 목록) -->
   <div class="screen" id="screen-assets">
-    <div class="dash-card">
-      <div class="chart-wrap">
-        <div class="donut-wrap">
-          <svg id="assetsDonutChart" viewBox="0 0 200 200"></svg>
-          <div class="donut-callouts" id="assetsDonutCallouts"></div>
-          <div class="donut-center-label" id="assetsDonutCenterLabel"></div>
-        </div>
-      </div>
-      <div class="dash-empty" id="assetsDonutEmpty" style="display:none;">등록된 자산이 없습니다.</div>
-    </div>
     <div class="month-nav">
       <h2 id="assetsMonthLabel"></h2>
       <div class="navbtns">
@@ -647,6 +643,16 @@
         <button class="chip" data-owner="hyeonje">현제</button>
         <button class="chip" data-owner="shared">공용</button>
       </div>
+    </div>
+    <div class="dash-card">
+      <div class="chart-wrap">
+        <div class="donut-wrap">
+          <svg id="assetsDonutChart" viewBox="0 0 200 200"></svg>
+          <div class="donut-callouts" id="assetsDonutCallouts"></div>
+          <div class="donut-center-label" id="assetsDonutCenterLabel"></div>
+        </div>
+      </div>
+      <div class="dash-empty" id="assetsDonutEmpty" style="display:none;">등록된 자산이 없습니다.</div>
     </div>
     <div class="day-detail" style="display:block; margin:12px 16px 20px;">
       <div id="assetsEntryList"></div>
@@ -2287,6 +2293,17 @@ document.getElementById("assetOwnerFilter").addEventListener("click", (e) => {
   });
   renderAssetsScreen();
 });
+
+// 자산 총액은 평소엔 가려두고, 금액을 꾹 누르고 있는 동안만 잠깐 보여준다.
+(() => {
+  const totalEl = document.getElementById("assetsMonthTotal");
+  const reveal = () => totalEl.classList.add("revealed");
+  const hide = () => totalEl.classList.remove("revealed");
+  totalEl.addEventListener("pointerdown", reveal);
+  totalEl.addEventListener("pointerup", hide);
+  totalEl.addEventListener("pointerleave", hide);
+  totalEl.addEventListener("pointercancel", hide);
+})();
 
 /* ---------- 고정 지출 관리 모달 ---------- */
 // recurringManageDraft.mode: null(입력창 없음) | "add"(새 항목 추가) | 수정 중인 항목의 id
