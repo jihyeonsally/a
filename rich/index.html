@@ -69,7 +69,10 @@
   }
   .site-title-wrap{ display:flex; align-items:center; gap:8px; min-width:0; }
   .site-title-icon{ width:32px; height:32px; object-fit:contain; flex-shrink:0; }
-  .site-title{ font-size:20px; font-weight:700; color: var(--text); white-space:nowrap; letter-spacing:-0.5px; }
+  /* 한글은 이 폰트에서 숫자보다 글자 자체 높이(잉크 높이)가 크게 나오기 때문에,
+     선언한 폰트 크기가 같아도(20px) 한글로만 된 제목이 숫자 위주인 금액보다 커 보인다.
+     실제 렌더링된 글자 높이를 맞추기 위해 제목 크기를 16px로 낮춘다. */
+  .site-title{ font-size:16px; font-weight:700; color: var(--text); white-space:nowrap; letter-spacing:-0.5px; }
   .ledger-toggle{
     display:flex; gap:4px;
     background: var(--card);
