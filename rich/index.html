@@ -2358,7 +2358,11 @@ function renderRecurringManageList() {
   });
   wrap.querySelectorAll("[data-add-recurring]").forEach(nameWrap => {
     nameWrap.addEventListener("click", () => {
-      addRecurringItemToCurrentMonth(nameWrap.dataset.addRecurring);
+      const id = nameWrap.dataset.addRecurring;
+      const it = state.recurringItems.find(x => x.id === id);
+      const label = it ? `${it.day}일 ${fmtNum(it.amount)}원${it.memo ? " · " + it.memo : ""}` : "";
+      if (!confirm(`"${label}" 항목을 이번 달에 추가하시겠습니까?`)) return;
+      addRecurringItemToCurrentMonth(id);
     });
   });
   const addBtn = document.getElementById("addRecurringBtn");
