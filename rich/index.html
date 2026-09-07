@@ -1952,8 +1952,9 @@ function renderDashboardAllTab(applyPayerFilter) {
 
   const dashTotalEl = document.getElementById("dashTotal");
   const netTotal = incomeTotal - expenseTotal - investmentTotal;
-  dashTotalEl.textContent = `${fmtNum(netTotal)}원`;
-  dashTotalEl.className = "dash-total mono";
+  const netSign = netTotal < 0 ? "-" : "+";
+  dashTotalEl.textContent = `${netSign}${fmtNum(Math.abs(netTotal))}원`;
+  dashTotalEl.className = `dash-total mono ${netTotal < 0 ? "expense" : "income"}`;
 
   const ALL_TAB_CATS = [
     { id: "expense_total", label: "지출", icon: "💸" },
@@ -3079,9 +3080,9 @@ function renderChart() {
       cls = m.balance < 0 ? "expense" : "neutral";
     } else if (metric === "all") {
       const net = m.income - m.expense - m.investment;
-      sign = net < 0 ? "-" : "";
+      sign = net < 0 ? "-" : "+";
       amt = Math.abs(net);
-      cls = net < 0 ? "expense" : "neutral";
+      cls = net < 0 ? "expense" : "income";
     } else if (metric === "expense") {
       sign = "-"; amt = m.expense; cls = "expense";
     } else if (metric === "income") {
