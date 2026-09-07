@@ -610,6 +610,16 @@
 
   <!-- Screen 3: Asset entries (월별 자산 내역 목록) -->
   <div class="screen" id="screen-assets">
+    <div class="dash-card">
+      <div class="chart-wrap">
+        <div class="donut-wrap">
+          <svg id="assetsDonutChart" viewBox="0 0 200 200"></svg>
+          <div class="donut-callouts" id="assetsDonutCallouts"></div>
+          <div class="donut-center-label" id="assetsDonutCenterLabel"></div>
+        </div>
+      </div>
+      <div class="dash-empty" id="assetsDonutEmpty" style="display:none;">등록된 자산이 없습니다.</div>
+    </div>
     <div class="month-nav">
       <h2 id="assetsMonthLabel"></h2>
       <div class="navbtns">
@@ -1966,7 +1976,45 @@ async function loadAssetMonthlyData() {
 /* ---------- 자산 화면 (월별 자산 내역 목록) ---------- */
 // 분류(카테고리)는 토글로 접고 펼치고, 세부항목은 그 안에 들여쓴 행으로 표시한다.
 // 각 세부항목의 금액 칸은 클릭하면 입력창으로 바뀌는 엑셀 스타일 셀이다.
+// 대시보드 도넛과 같은 방식(renderDonutChart)으로, 전체 자산 대비 각 분류의 비중을
+// 아이콘·%와 함께 보여준다. 분류명에 "제외"가 포함된 분류와 현재 선택된 소유
+// 가계부 필터(전체/지현/현제/공용)를 반영한다.
+function renderAssetsDonut() {
+  const svg = document.getElementById("assetsDonutChart");
+  const calloutsEl = document.getElementById("assetsDonutCallouts");
+  const centerLabel = document.getElementById("assetsDonutCenterLabel");
+  const emptyMsg = document.getElementById("assetsDonutEmpty");
+
+  centerLabel.textContent = `${state.assetsDate.getMonth() + 1}월`;
+
+  const excludedIds = excludedAssetItemIds();
+  const filter = state.assetOwnerFilter;
+  const totals = {};
+  state.assetItems.forEach(it => {
+    if (excludedIds.has(it.id)) return;
+    if (filter !== "all" && (it.ownerLedger || "shared") !== filter) return;
+    const v = Number(state.assetMonthValues[it.id]) || 0;
+    if (v > 0) totals[it.categoryId] = (totals[it.categoryId] || 0) + v;
+  });
+
+  const catsWithAmount = state.assetCategories
+    .filter(cat => !isExcludedAssetCategory(cat) && (totals[cat.id] || 0) > 0)
+    .map(cat => ({ id: cat.id, label: cat.label, icon: cat.icon || DEFAULT_ASSET_ICON }))
+    .sort((a, b) => totals[b.id] - totals[a.id]);
+  const denom = catsWithAmount.reduce((sum, c) => sum + totals[c.id], 0);
+
+  if (catsWithAmount.length === 0 || denom <= 0) {
+    emptyMsg.style.display = "block";
+    svg.innerHTML = "";
+    calloutsEl.innerHTML = "";
+    return;
+  }
+  emptyMsg.style.display = "none";
+  renderDonutChart(svg, calloutsEl, catsWithAmount, totals, denom, "balance", 0);
+}
+
 function renderAssetsScreen() {
+  renderAssetsDonut();
   const d = state.assetsDate;
   document.getElementById("assetsMonthLabel").textContent = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 
