@@ -1106,7 +1106,7 @@ function listenRecurringItems(ledgerId) {
     }
     const data = snap.data();
     state.recurringItems = (data && data.items) || [];
-    ensureRecurringEntriesForMonth(ledgerId, state.calDate);
+    // 자동 생성은 하지 않는다 — 목록에서 항목을 직접 눌러 확인해야만 그 달에 추가된다.
   }, (err) => {
     console.error("Firestore listen error (recurring):", err);
   });
@@ -1116,12 +1116,14 @@ async function saveRecurringItems(ledgerId, items) {
   await db.collection(RECURRING_COLLECTION).doc(ledgerId).set({ items });
 }
 
-// 그 달에 아직 생성되지 않은 고정 지출을 자동으로 채워 넣는다 (지연 생성).
-// 이미 recurringId가 같은 내역이 있으면 건드리지 않는다.
-// onlyIds를 넘기면 그 항목(들)만 대상으로 한다 (관리 UI에서 특정 항목을 눌러 바로 추가할 때 사용).
-async function ensureRecurringEntriesForMonth(ledgerId, dateObj, onlyIds) {
-  const items = onlyIds ? state.recurringItems.filter(it => onlyIds.has(it.id)) : state.recurringItems;
-  if (!items || items.length === 0) return;
+// 고정 지출 관리 목록에서 항목을 누르고 확인 팝업에서 "예"를 누르면,
+// 현재 달력에 표시된 월에 그 지출을 추가한다. 자동으로는 추가되지 않는다.
+// 그 달에 이미 같은 항목(recurringId)이 추가되어 있으면 오류를 안내하고 추가하지 않는다.
+async function addRecurringItemToCurrentMonth(itemId) {
+  const it = state.recurringItems.find(x => x.id === itemId);
+  if (!it) return;
+  const ledgerId = state.currentLedger;
+  const dateObj = state.calDate;
   const monthKey = monthKeyOf(dateObj);
   const daysInMonth = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate();
   const docId = monthDocId(ledgerId, monthKey);
@@ -1130,37 +1132,31 @@ async function ensureRecurringEntriesForMonth(ledgerId, dateObj, onlyIds) {
   try {
     const snap = await db.collection(COLLECTION).doc(docId).get();
     const existing = (snap.data() && snap.data().entries) || [];
-    const existingRecurringIds = new Set(existing.filter(e => e.recurringId).map(e => e.recurringId));
-    const missing = items.filter(it => !existingRecurringIds.has(it.id));
-    if (missing.length === 0) return;
-    const newEntries = missing.map(it => {
-      const day = Math.min(Number(it.day) || 1, daysInMonth);
-      return {
-        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
-        date: `${monthKey}-${String(day).padStart(2, "0")}`,
-        type: "expense",
-        amount: Number(it.amount) || 0,
-        category: it.category,
-        payer: ledgerId === "shared" ? (it.payer || "jihyeon") : ledgerId,
-        memo: it.memo || "",
-        recurringId: it.id,
-        createdAt: Date.now(),
-      };
-    });
+    if (existing.some(e => e.recurringId === it.id)) {
+      alert("이미 이번 달에 추가된 고정 지출입니다.");
+      return;
+    }
+    const day = Math.min(Number(it.day) || 1, daysInMonth);
+    const newEntry = {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
+      date: `${monthKey}-${String(day).padStart(2, "0")}`,
+      type: "expense",
+      amount: Number(it.amount) || 0,
+      category: it.category,
+      payer: ledgerId === "shared" ? (it.payer || "jihyeon") : ledgerId,
+      memo: it.memo || "",
+      recurringId: it.id,
+      createdAt: Date.now(),
+    };
     await db.collection(COLLECTION).doc(docId).set({
-      entries: firebase.firestore.FieldValue.arrayUnion(...newEntries)
+      entries: firebase.firestore.FieldValue.arrayUnion(newEntry)
     }, { merge: true });
   } catch (err) {
-    console.error("고정 지출 자동 생성 실패:", err);
+    console.error("고정 지출 추가 실패:", err);
+    alert("추가에 실패했습니다.\n" + err.message);
   } finally {
     recurringGenInFlight.delete(docId);
   }
-}
-
-// 고정 지출 관리 목록에서 항목을 누르면, 현재 달력에 표시된 월에 그 지출을 바로 추가한다.
-// (이미 그 달에 추가되어 있으면 건드리지 않는다.)
-async function addRecurringItemToCurrentMonth(itemId) {
-  await ensureRecurringEntriesForMonth(state.currentLedger, state.calDate, new Set([itemId]));
 }
 
 function assetStructureDocId(ledgerId) {
@@ -1505,7 +1501,6 @@ document.getElementById("prevMonth").addEventListener("click", () => {
   renderDayDetail();
   renderMonthSummary();
   listenCalendarMonth(state.currentLedger, state.calDate);
-  ensureRecurringEntriesForMonth(state.currentLedger, state.calDate);
 });
 document.getElementById("nextMonth").addEventListener("click", () => {
   state.calDate = new Date(state.calDate.getFullYear(), state.calDate.getMonth() + 1, 1);
@@ -1515,7 +1510,6 @@ document.getElementById("nextMonth").addEventListener("click", () => {
   renderDayDetail();
   renderMonthSummary();
   listenCalendarMonth(state.currentLedger, state.calDate);
-  ensureRecurringEntriesForMonth(state.currentLedger, state.calDate);
 });
 
 /* ====================== 대시보드 화면 ====================== */
