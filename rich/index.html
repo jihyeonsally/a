@@ -103,6 +103,7 @@
     cursor:pointer; font-size:15px; flex-shrink:0;
   }
   .search-btn:hover{ background: var(--accent-soft); }
+  .summary-top-btns{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
   .summary-row{
     display:flex; flex-wrap:nowrap; align-items:center; justify-content:space-between;
     gap:8px; padding: 3px 0; font-size:15px; overflow:hidden;
@@ -481,6 +482,9 @@
     background: var(--card); font-family: inherit; font-size:15px; color: var(--text); outline:none;
     width:42px; text-align:center;
   }
+  .recurring-form{ display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; padding:10px 0; }
+  .recurring-form-row{ display:flex; gap:6px; }
+  .recurring-day-input{ width:64px; flex-shrink:0; }
 
   /* ---------- Search sheet ---------- */
   .search-results{ margin-top:16px; display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; }
@@ -536,7 +540,10 @@
     <div class="month-summary" id="monthSummary">
       <div class="summary-top">
         <span class="summary-remaining mono" id="summaryRemaining">0원</span>
-        <button class="search-btn" id="searchBtn" aria-label="메모 검색">🔍</button>
+        <div class="summary-top-btns">
+          <button class="search-btn" id="recurringBtn" aria-label="고정 지출 관리">🔁</button>
+          <button class="search-btn" id="searchBtn" aria-label="메모 검색">🔍</button>
+        </div>
       </div>
       <div class="summary-row" id="summaryRow">
         <span class="summary-item">
@@ -757,6 +764,20 @@
   </div>
 </div>
 
+<!-- 고정 지출 관리 -->
+<div class="overlay" id="recurringManageOverlay">
+  <div class="sheet">
+    <div class="sheet-header">
+      <button class="close-btn" id="closeRecurringManageSheet">✕</button>
+      <div class="sheet-handle"></div>
+      <h3>고정 지출 관리</h3>
+    </div>
+    <div class="sheet-body">
+      <div id="recurringManageList"></div>
+    </div>
+  </div>
+</div>
+
 <!-- 자산 분류/항목 관리 -->
 <div class="overlay" id="assetManageOverlay">
   <div class="sheet">
@@ -793,6 +814,27 @@ const ASSET_COLLECTION = "asset_v1"; // 자산 분류/세부항목 구조 및 �
 // 자산은 공용/지현/현제 가계부와 무관하게 하나만 관리한다 (가계부 토글의 영향을 받지 않음).
 // 기존에 "지현" 가계부에서 입력해둔 데이터를 그대로 공통 자산으로 이어서 쓴다.
 const ASSET_LEDGER_KEY = "jihyeon";
+
+const RECURRING_COLLECTION = "recurring_v1"; // 가계부별 고정 지출 템플릿
+// 문서: {ledgerId} → { items: [{ id, day, amount, category, memo, payer }] }
+// 매달 달력을 열 때, 그 달에 아직 생성되지 않은(=entries에 같은 recurringId가 없는)
+// 고정 지출 항목을 자동으로 채워 넣는다(지연 생성). 템플릿을 수정해도 이미 생성된
+// 과거 달의 내역은 바뀌지 않고, 그 다음부터 새로 만들어지는 달에만 반영된다.
+// 문서가 아직 없는 가계부는 아래 기본값으로 최초 1회 자동 생성한다.
+const DEFAULT_RECURRING_ITEMS = {
+  shared: [
+    { day: 17, amount: 4900, category: "subscription", memo: "네이버멤버십", payer: "jihyeon" },
+    { day: 18, amount: 5900, category: "subscription", memo: "토스프라임", payer: "jihyeon" },
+    { day: 16, amount: 7890, category: "subscription", memo: "쿠팡와우", payer: "jihyeon" },
+  ],
+  jihyeon: [
+    { day: 3, amount: 50000, category: "culture", memo: "2G", payer: "jihyeon" },
+    { day: 3, amount: 10000, category: "culture", memo: "바레모타", payer: "jihyeon" },
+  ],
+  hyeonje: [
+    { day: 1, amount: 30000, category: "dues", memo: "계비", payer: "hyeonje" },
+  ],
+};
 
 /* ====================== 상수 정의 ====================== */
 const LEDGERS = [
@@ -984,6 +1026,9 @@ const state = {
   chartStartMonth: null, // 차트 화면 표시 범위 시작 "YYYY-MM"
   chartEndMonth: null,   // 차트 화면 표시 범위 종료 "YYYY-MM" (기본값: 오늘이 속한 연월)
   chartExpandedMonths: new Set(), // 차트 화면 하단 목록에서 펼쳐진 월(monthKey) 목록
+  recurringItems: [], // 현재 가계부의 고정 지출 템플릿 목록
+  recurringUnsub: null,
+  recurringManageDraft: { mode: null, day: "", amount: "", category: null, memo: "", payer: "jihyeon" }, // mode: null | "add" | 수정 중인 항목 id
 };
 
 /* ====================== Firestore 연동 (월별 문서 샤딩) ======================
@@ -1024,6 +1069,81 @@ function listenDashboardMonth(ledgerId, dateObj) {
   }, (err) => {
     console.error("Firestore listen error (dashboard):", err);
   });
+}
+
+const recurringSeedInFlight = new Set(); // 시딩 도중 같은 가계부에 대해 중복 시딩(레이스)이 일어나지 않도록 막는다.
+const recurringGenInFlight = new Set(); // 같은 달에 대해 고정 지출 생성이 중복 실행되지 않도록 막는다.
+
+function listenRecurringItems(ledgerId) {
+  if (state.recurringUnsub) state.recurringUnsub();
+  state.recurringUnsub = db.collection(RECURRING_COLLECTION).doc(ledgerId).onSnapshot(async (snap) => {
+    if (!snap.exists && DEFAULT_RECURRING_ITEMS[ledgerId]) {
+      if (recurringSeedInFlight.has(ledgerId)) return;
+      recurringSeedInFlight.add(ledgerId);
+      // 문서가 아직 없는 가계부는 기본 고정 지출 목록으로 최초 1회 채워둔다.
+      const seeded = DEFAULT_RECURRING_ITEMS[ledgerId].map(it => ({
+        ...it,
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
+      }));
+      try {
+        await saveRecurringItems(ledgerId, seeded);
+      } catch (err) {
+        console.error("고정 지출 기본값 저장 실패:", err);
+      } finally {
+        recurringSeedInFlight.delete(ledgerId);
+      }
+      return; // 저장 후 onSnapshot이 다시 호출된다.
+    }
+    const data = snap.data();
+    state.recurringItems = (data && data.items) || [];
+    ensureRecurringEntriesForMonth(ledgerId, state.calDate);
+  }, (err) => {
+    console.error("Firestore listen error (recurring):", err);
+  });
+}
+
+async function saveRecurringItems(ledgerId, items) {
+  await db.collection(RECURRING_COLLECTION).doc(ledgerId).set({ items });
+}
+
+// 그 달에 아직 생성되지 않은 고정 지출을 자동으로 채워 넣는다 (지연 생성).
+// 이미 recurringId가 같은 내역이 있으면 건드리지 않는다.
+async function ensureRecurringEntriesForMonth(ledgerId, dateObj) {
+  const items = state.recurringItems;
+  if (!items || items.length === 0) return;
+  const monthKey = monthKeyOf(dateObj);
+  const daysInMonth = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate();
+  const docId = monthDocId(ledgerId, monthKey);
+  if (recurringGenInFlight.has(docId)) return;
+  recurringGenInFlight.add(docId);
+  try {
+    const snap = await db.collection(COLLECTION).doc(docId).get();
+    const existing = (snap.data() && snap.data().entries) || [];
+    const existingRecurringIds = new Set(existing.filter(e => e.recurringId).map(e => e.recurringId));
+    const missing = items.filter(it => !existingRecurringIds.has(it.id));
+    if (missing.length === 0) return;
+    const newEntries = missing.map(it => {
+      const day = Math.min(Number(it.day) || 1, daysInMonth);
+      return {
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
+        date: `${monthKey}-${String(day).padStart(2, "0")}`,
+        type: "expense",
+        amount: Number(it.amount) || 0,
+        category: it.category,
+        payer: ledgerId === "shared" ? (it.payer || "jihyeon") : ledgerId,
+        memo: it.memo || "",
+        recurringId: it.id,
+        createdAt: Date.now(),
+      };
+    });
+    await db.collection(COLLECTION).doc(docId).set({
+      entries: firebase.firestore.FieldValue.arrayUnion(...newEntries)
+    }, { merge: true });
+  } catch (err) {
+    console.error("고정 지출 자동 생성 실패:", err);
+  } finally {
+    recurringGenInFlight.delete(docId);
+  }
 }
 
 function assetStructureDocId(ledgerId) {
@@ -1133,6 +1253,7 @@ function switchLedger(id) {
   renderDashboard();
   listenCalendarMonth(id, state.calDate);
   listenDashboardMonth(id, state.dashDate);
+  listenRecurringItems(id);
   const activeScreenId = document.querySelector(".screen.active").id;
   if (activeScreenId === "screen-chart") loadAssetMonthlyData();
 }
@@ -1367,6 +1488,7 @@ document.getElementById("prevMonth").addEventListener("click", () => {
   renderDayDetail();
   renderMonthSummary();
   listenCalendarMonth(state.currentLedger, state.calDate);
+  ensureRecurringEntriesForMonth(state.currentLedger, state.calDate);
 });
 document.getElementById("nextMonth").addEventListener("click", () => {
   state.calDate = new Date(state.calDate.getFullYear(), state.calDate.getMonth() + 1, 1);
@@ -1376,6 +1498,7 @@ document.getElementById("nextMonth").addEventListener("click", () => {
   renderDayDetail();
   renderMonthSummary();
   listenCalendarMonth(state.currentLedger, state.calDate);
+  ensureRecurringEntriesForMonth(state.currentLedger, state.calDate);
 });
 
 /* ====================== 대시보드 화면 ====================== */
@@ -2152,6 +2275,182 @@ document.getElementById("assetOwnerFilter").addEventListener("click", (e) => {
     c.classList.toggle("active", c.dataset.owner === state.assetOwnerFilter);
   });
   renderAssetsScreen();
+});
+
+/* ---------- 고정 지출 관리 모달 ---------- */
+// recurringManageDraft.mode: null(입력창 없음) | "add"(새 항목 추가) | 수정 중인 항목의 id
+function renderRecurringManageList() {
+  const wrap = document.getElementById("recurringManageList");
+  const draft = state.recurringManageDraft;
+  const isShared = state.currentLedger === "shared";
+  const cats = categoriesForLedger(state.currentLedger).expense || [];
+
+  const formHtml = () => `
+    <div class="recurring-form">
+      <div class="recurring-form-row">
+        <input type="number" min="1" max="31" id="recurringDraftDay" class="manage-draft-input recurring-day-input" placeholder="일" value="${escapeHtml(String(draft.day || ""))}" autocomplete="off" />
+        <input type="text" inputmode="numeric" id="recurringDraftAmount" class="manage-draft-input" placeholder="금액" value="${draft.amount ? fmtNum(draft.amount) : ""}" autocomplete="off" />
+      </div>
+      <div class="field-label">카테고리</div>
+      <div class="chip-row" id="recurringDraftCategoryChips">
+        ${cats.map(c => `<button type="button" class="chip ${draft.category === c.id ? "active" : ""}" data-cat="${c.id}">${c.icon} ${escapeHtml(c.label)}</button>`).join("")}
+      </div>
+      ${isShared ? `
+      <div class="field-label">결제자</div>
+      <div class="chip-row" id="recurringDraftPayerChips">
+        <button type="button" class="chip ${draft.payer === "jihyeon" ? "active" : ""}" data-payer="jihyeon">지현</button>
+        <button type="button" class="chip ${draft.payer === "hyeonje" ? "active" : ""}" data-payer="hyeonje">현제</button>
+      </div>` : ""}
+      <input type="text" id="recurringDraftMemo" class="manage-draft-input" placeholder="메모 (선택)" value="${escapeHtml(draft.memo || "")}" autocomplete="off" />
+      <div class="recurring-form-row">
+        <button class="manage-confirm-btn" id="recurringDraftConfirmBtn" style="flex:1;">저장</button>
+        <button class="manage-add-btn" id="recurringDraftCancelBtn" style="flex:1;">취소</button>
+      </div>
+    </div>`;
+
+  const rows = state.recurringItems.slice().sort((a, b) => (a.day || 0) - (b.day || 0)).map(it => {
+    if (draft.mode === it.id) {
+      return `<div class="manage-item-row" style="align-items:flex-start;">${formHtml()}</div>`;
+    }
+    const cat = cats.find(c => c.id === it.category);
+    const catLabel = cat ? cat.label : it.category;
+    const catIcon = cat ? cat.icon : "📦";
+    const payerLabel = isShared ? ` · ${LEDGER_SHORT_LABEL[it.payer || "jihyeon"]}` : "";
+    return `
+      <div class="manage-item-row" data-recurring-id="${it.id}">
+        <span class="manage-name-wrap" data-edit-recurring="${it.id}">
+          <span class="manage-name">${it.day}일 · ${catIcon} ${escapeHtml(catLabel)} · ${fmtNum(it.amount)}원${it.memo ? " · " + escapeHtml(it.memo) : ""}${payerLabel}</span>
+        </span>
+        <button class="manage-del-btn" data-del-recurring="${it.id}">삭제</button>
+      </div>`;
+  }).join("");
+
+  const addRow = draft.mode === "add"
+    ? `<div class="manage-item-row" style="align-items:flex-start;">${formHtml()}</div>`
+    : `<button class="manage-add-btn manage-add-cat-btn" id="addRecurringBtn">+ 고정 지출 추가</button>`;
+
+  wrap.innerHTML = (state.recurringItems.length === 0 && draft.mode !== "add"
+    ? `<div class="day-detail-empty">등록된 고정 지출이 없습니다.</div>`
+    : rows) + addRow;
+
+  wrap.querySelectorAll("[data-del-recurring]").forEach(btn => {
+    btn.addEventListener("click", () => deleteRecurringItem(btn.dataset.delRecurring));
+  });
+  wrap.querySelectorAll("[data-edit-recurring]").forEach(nameWrap => {
+    nameWrap.addEventListener("click", () => {
+      const it = state.recurringItems.find(x => x.id === nameWrap.dataset.editRecurring);
+      if (!it) return;
+      state.recurringManageDraft = { mode: it.id, day: it.day, amount: it.amount, category: it.category, memo: it.memo || "", payer: it.payer || "jihyeon" };
+      renderRecurringManageList();
+    });
+  });
+  const addBtn = document.getElementById("addRecurringBtn");
+  if (addBtn) addBtn.addEventListener("click", () => {
+    state.recurringManageDraft = { mode: "add", day: "", amount: "", category: (cats[0] && cats[0].id) || null, memo: "", payer: "jihyeon" };
+    renderRecurringManageList();
+  });
+
+  const dayInput = document.getElementById("recurringDraftDay");
+  if (dayInput) {
+    dayInput.focus();
+    dayInput.addEventListener("input", (e) => { state.recurringManageDraft.day = e.target.value; });
+  }
+  const amountInput = document.getElementById("recurringDraftAmount");
+  if (amountInput) {
+    amountInput.addEventListener("input", (e) => {
+      const digits = e.target.value.replace(/[^0-9]/g, "");
+      e.target.value = digits ? Number(digits).toLocaleString("ko-KR") : "";
+      state.recurringManageDraft.amount = digits ? Number(digits) : "";
+    });
+  }
+  const memoInput = document.getElementById("recurringDraftMemo");
+  if (memoInput) {
+    memoInput.addEventListener("input", (e) => { state.recurringManageDraft.memo = e.target.value; });
+  }
+  const catChipsWrap = document.getElementById("recurringDraftCategoryChips");
+  if (catChipsWrap) {
+    catChipsWrap.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (!chip) return;
+      state.recurringManageDraft.category = chip.dataset.cat;
+      renderRecurringManageList();
+    });
+  }
+  const payerChipsWrap = document.getElementById("recurringDraftPayerChips");
+  if (payerChipsWrap) {
+    payerChipsWrap.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (!chip) return;
+      state.recurringManageDraft.payer = chip.dataset.payer;
+      renderRecurringManageList();
+    });
+  }
+  const confirmBtn = document.getElementById("recurringDraftConfirmBtn");
+  if (confirmBtn) confirmBtn.addEventListener("click", confirmRecurringDraft);
+  const cancelBtn = document.getElementById("recurringDraftCancelBtn");
+  if (cancelBtn) cancelBtn.addEventListener("click", () => {
+    state.recurringManageDraft = { mode: null, day: "", amount: "", category: null, memo: "", payer: "jihyeon" };
+    renderRecurringManageList();
+  });
+}
+
+async function confirmRecurringDraft() {
+  const draft = state.recurringManageDraft;
+  const day = Math.min(31, Math.max(1, Number(draft.day) || 0));
+  const amount = Number(draft.amount) || 0;
+  if (!day || !amount || !draft.category) {
+    alert("일, 금액, 카테고리를 모두 입력해주세요.");
+    return;
+  }
+  const ledgerId = state.currentLedger;
+  const payer = ledgerId === "shared" ? (draft.payer || "jihyeon") : ledgerId;
+  if (draft.mode === "add") {
+    state.recurringItems.push({
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
+      day, amount, category: draft.category, memo: draft.memo || "", payer,
+    });
+  } else {
+    const it = state.recurringItems.find(x => x.id === draft.mode);
+    if (it) {
+      it.day = day; it.amount = amount; it.category = draft.category; it.memo = draft.memo || ""; it.payer = payer;
+    }
+  }
+  state.recurringManageDraft = { mode: null, day: "", amount: "", category: null, memo: "", payer: "jihyeon" };
+  try {
+    await saveRecurringItems(ledgerId, state.recurringItems);
+  } catch (err) {
+    console.error("고정 지출 저장 실패:", err);
+    alert("저장에 실패했습니다.\n" + err.message);
+  }
+  renderRecurringManageList();
+}
+
+async function deleteRecurringItem(id) {
+  const it = state.recurringItems.find(x => x.id === id);
+  if (!confirm(`"${it ? (it.day + "일 " + fmtNum(it.amount) + "원") : ""}" 고정 지출을 삭제할까요?\n(이미 생성된 과거 내역은 남아있습니다.)`)) return;
+  const ledgerId = state.currentLedger;
+  state.recurringItems = state.recurringItems.filter(x => x.id !== id);
+  try {
+    await saveRecurringItems(ledgerId, state.recurringItems);
+  } catch (err) {
+    console.error("고정 지출 삭제 실패:", err);
+    alert("삭제에 실패했습니다.\n" + err.message);
+  }
+  renderRecurringManageList();
+}
+
+function openRecurringManageModal() {
+  state.recurringManageDraft = { mode: null, day: "", amount: "", category: null, memo: "", payer: "jihyeon" };
+  renderRecurringManageList();
+  document.getElementById("recurringManageOverlay").classList.add("show");
+}
+function closeRecurringManageModal() {
+  document.getElementById("recurringManageOverlay").classList.remove("show");
+}
+document.getElementById("recurringBtn").addEventListener("click", openRecurringManageModal);
+document.getElementById("closeRecurringManageSheet").addEventListener("click", closeRecurringManageModal);
+document.getElementById("recurringManageOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "recurringManageOverlay") closeRecurringManageModal();
 });
 
 /* ---------- 자산 분류/항목 관리 모달 ---------- */
@@ -3161,6 +3460,7 @@ updateChartMetricVisibility();
 renderMonthSummary();
 listenCalendarMonth(state.currentLedger, state.calDate);
 listenDashboardMonth(state.currentLedger, state.dashDate);
+listenRecurringItems(state.currentLedger);
 listenAssetStructure(ASSET_LEDGER_KEY);
 listenAssetMonthValues(ASSET_LEDGER_KEY, state.assetsDate);
 
