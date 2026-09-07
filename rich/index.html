@@ -454,6 +454,10 @@
     border:none; background:none; color: var(--expense); font-family:inherit; font-size:12px;
     font-weight:700; cursor:pointer; padding:4px 8px; flex-shrink:0;
   }
+  .manage-edit-btn{
+    border:none; background:none; color: var(--accent); font-family:inherit; font-size:12px;
+    font-weight:700; cursor:pointer; padding:4px 8px; flex-shrink:0;
+  }
   .drag-handle{
     cursor: grab; color: var(--text-dim); font-size:15px; line-height:1; padding:4px 4px;
     touch-action: none; flex-shrink:0; user-select:none;
@@ -1108,8 +1112,9 @@ async function saveRecurringItems(ledgerId, items) {
 
 // 그 달에 아직 생성되지 않은 고정 지출을 자동으로 채워 넣는다 (지연 생성).
 // 이미 recurringId가 같은 내역이 있으면 건드리지 않는다.
-async function ensureRecurringEntriesForMonth(ledgerId, dateObj) {
-  const items = state.recurringItems;
+// onlyIds를 넘기면 그 항목(들)만 대상으로 한다 (관리 UI에서 특정 항목을 눌러 바로 추가할 때 사용).
+async function ensureRecurringEntriesForMonth(ledgerId, dateObj, onlyIds) {
+  const items = onlyIds ? state.recurringItems.filter(it => onlyIds.has(it.id)) : state.recurringItems;
   if (!items || items.length === 0) return;
   const monthKey = monthKeyOf(dateObj);
   const daysInMonth = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate();
@@ -1144,6 +1149,12 @@ async function ensureRecurringEntriesForMonth(ledgerId, dateObj) {
   } finally {
     recurringGenInFlight.delete(docId);
   }
+}
+
+// 고정 지출 관리 목록에서 항목을 누르면, 현재 달력에 표시된 월에 그 지출을 바로 추가한다.
+// (이미 그 달에 추가되어 있으면 건드리지 않는다.)
+async function addRecurringItemToCurrentMonth(itemId) {
+  await ensureRecurringEntriesForMonth(state.currentLedger, state.calDate, new Set([itemId]));
 }
 
 function assetStructureDocId(ledgerId) {
@@ -2318,9 +2329,10 @@ function renderRecurringManageList() {
     const payerLabel = isShared ? ` · ${LEDGER_SHORT_LABEL[it.payer || "jihyeon"]}` : "";
     return `
       <div class="manage-item-row" data-recurring-id="${it.id}">
-        <span class="manage-name-wrap" data-edit-recurring="${it.id}">
+        <span class="manage-name-wrap" data-add-recurring="${it.id}">
           <span class="manage-name">${it.day}일 · ${catIcon} ${escapeHtml(catLabel)} · ${fmtNum(it.amount)}원${it.memo ? " · " + escapeHtml(it.memo) : ""}${payerLabel}</span>
         </span>
+        <button class="manage-edit-btn" data-edit-recurring="${it.id}">수정</button>
         <button class="manage-del-btn" data-del-recurring="${it.id}">삭제</button>
       </div>`;
   }).join("");
@@ -2336,12 +2348,17 @@ function renderRecurringManageList() {
   wrap.querySelectorAll("[data-del-recurring]").forEach(btn => {
     btn.addEventListener("click", () => deleteRecurringItem(btn.dataset.delRecurring));
   });
-  wrap.querySelectorAll("[data-edit-recurring]").forEach(nameWrap => {
-    nameWrap.addEventListener("click", () => {
-      const it = state.recurringItems.find(x => x.id === nameWrap.dataset.editRecurring);
+  wrap.querySelectorAll("[data-edit-recurring]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const it = state.recurringItems.find(x => x.id === btn.dataset.editRecurring);
       if (!it) return;
       state.recurringManageDraft = { mode: it.id, day: it.day, amount: it.amount, category: it.category, memo: it.memo || "", payer: it.payer || "jihyeon" };
       renderRecurringManageList();
+    });
+  });
+  wrap.querySelectorAll("[data-add-recurring]").forEach(nameWrap => {
+    nameWrap.addEventListener("click", () => {
+      addRecurringItemToCurrentMonth(nameWrap.dataset.addRecurring);
     });
   });
   const addBtn = document.getElementById("addRecurringBtn");
