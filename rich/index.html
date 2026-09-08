@@ -1888,14 +1888,16 @@ function renderDashboard() {
     const expanded = state.dashExpandedCats.has(c.id);
     const entries = entriesByCat[c.id].slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
 
+    const isShared = state.currentLedger === "shared";
     const entriesHtml = entries.map(e => {
       const dateLabel = dayWithWeekday(e.date);
       const memoHtml = e.memo ? escapeHtml(e.memo) : "";
       const payer = e.payer || state.currentLedger;
+      const payerTag = isShared ? `<span class="owner-tag owner-${payer}">${LEDGER_SHORT_LABEL[payer]}</span>` : "";
       return `
         <div class="cat-entry-row" data-id="${e.id}">
           <span class="search-date mono">${dateLabel}</span>
-          <span class="owner-tag owner-${payer}">${LEDGER_SHORT_LABEL[payer]}</span>
+          ${payerTag}
           <span class="entry-memo">${memoHtml}</span>
           <span class="amt ${e.type}">${sign}${fmtNum(e.amount)}원</span>
         </div>`;
