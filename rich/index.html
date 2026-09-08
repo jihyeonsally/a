@@ -2343,7 +2343,8 @@ function renderRecurringManageList() {
       </div>
     </div>`;
 
-  const rows = state.recurringItems.slice().sort((a, b) => (a.day || 0) - (b.day || 0)).map(it => {
+  // 순서는 드래그로 조정한 그대로 저장된 배열 순서를 따른다 (day 기준 자동 정렬을 하지 않는다).
+  const rows = state.recurringItems.map(it => {
     if (draft.mode === it.id) {
       return `<div class="manage-item-row" style="align-items:flex-start;">${formHtml()}</div>`;
     }
@@ -2356,6 +2357,7 @@ function renderRecurringManageList() {
     const sign = RECURRING_TYPE_SIGN[type];
     return `
       <div class="manage-item-row" data-recurring-id="${it.id}">
+        <span class="drag-handle" data-drag="recurring">⠿</span>
         <span class="manage-name-wrap" data-add-recurring="${it.id}">
           <span class="manage-name">${it.day}일 · ${catIcon} ${escapeHtml(catLabel)} · ${sign}${fmtNum(it.amount)}원${it.memo ? " · " + escapeHtml(it.memo) : ""}${payerLabel}</span>
         </span>
@@ -2516,6 +2518,56 @@ document.getElementById("closeRecurringManageSheet").addEventListener("click", c
 document.getElementById("recurringManageOverlay").addEventListener("click", (e) => {
   if (e.target.id === "recurringManageOverlay") closeRecurringManageModal();
 });
+
+// 고정 내역 항목을 ⠿ 손잡이로 드래그해서 순서를 바꾼다. 목록이 다시 그려져도
+// (#recurringManageList 자체는 그대로라) 한 번만 등록해도 계속 동작한다.
+function initRecurringManageDrag() {
+  const root = document.getElementById("recurringManageList");
+  root.addEventListener("pointerdown", (e) => {
+    const handle = e.target.closest(".drag-handle");
+    if (!handle) return;
+    e.preventDefault();
+
+    const dragging = handle.closest(".manage-item-row");
+    if (!dragging) return;
+
+    dragging.classList.add("dragging");
+    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* 일부 브라우저에서 실패해도 무시 */ }
+
+    function onMove(ev) {
+      const siblings = Array.from(root.children).filter(el => el.matches(".manage-item-row") && el !== dragging);
+      for (const el of siblings) {
+        const rect = el.getBoundingClientRect();
+        if (ev.clientY >= rect.top && ev.clientY <= rect.bottom) {
+          if (ev.clientY < rect.top + rect.height / 2) root.insertBefore(dragging, el);
+          else root.insertBefore(dragging, el.nextSibling);
+          break;
+        }
+      }
+    }
+
+    function onUp() {
+      dragging.classList.remove("dragging");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+
+      const newOrder = Array.from(root.children)
+        .filter(el => el.matches(".manage-item-row") && el.dataset.recurringId)
+        .map(el => el.dataset.recurringId);
+      state.recurringItems.sort((a, b) => newOrder.indexOf(a.id) - newOrder.indexOf(b.id));
+
+      saveRecurringItems(state.currentLedger, state.recurringItems).catch(err => {
+        console.error("순서 저장 실패:", err);
+        alert("순서 저장에 실패했습니다.\n" + err.message);
+      });
+      renderRecurringManageList();
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+initRecurringManageDrag();
 
 /* ---------- 자산 분류/항목 관리 모달 ---------- */
 // assetManageDraft.kind: null(입력창 없음) | "category"(분류 추가 입력창) | "item"(특정 분류의 항목 추가 입력창)
