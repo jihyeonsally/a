@@ -1008,9 +1008,8 @@ const state = {
   currentLedger: localStorage.getItem("ledger_selected") || "shared",
   calEntries: [],             // 달력 화면에 표시 중인 월의 entries
   dashEntries: [],            // 대시보드 화면에 표시 중인 월의 entries
-  calDate: new Date(),        // 달력 화면 기준 월
+  calDate: new Date(),        // 기준 월 — 달력·대시보드 화면이 공유한다 (한쪽에서 월을 바꾸면 다른 쪽도 같이 바뀐다)
   selectedDate: null,         // 달력에서 선택된 날짜 (YYYY-MM-DD)
-  dashDate: new Date(),       // 대시보드 화면 기준 월
   dashType: "expense",
   dashPayerFilter: new Set(["all"]), // 공용 가계부 대시보드 결제자 필터 ("all" | "jihyeon" | "hyeonje" 중 하나만 선택)
   dashExpandedCats: new Set(), // 대시보드에서 펼쳐진 카테고리 id 목록
@@ -1265,7 +1264,7 @@ function switchLedger(id) {
   renderMonthSummary();
   renderDashboard();
   listenCalendarMonth(id, state.calDate);
-  listenDashboardMonth(id, state.dashDate);
+  listenDashboardMonth(id, state.calDate);
   listenRecurringItems(id);
   const activeScreenId = document.querySelector(".screen.active").id;
   if (activeScreenId === "screen-chart") loadAssetMonthlyData();
@@ -1493,24 +1492,23 @@ function renderMonthSummary() {
   document.getElementById("summaryRow").style.fontSize = `${summaryFontSize}px`;
 }
 
-document.getElementById("prevMonth").addEventListener("click", () => {
-  state.calDate = new Date(state.calDate.getFullYear(), state.calDate.getMonth() - 1, 1);
+// 달력과 대시보드는 기준 월(state.calDate)을 공유한다. 한쪽에서 월을 바꾸면
+// 두 화면 모두 그 월의 데이터를 다시 불러와 보여준다.
+function changeMonth(delta) {
+  state.calDate = new Date(state.calDate.getFullYear(), state.calDate.getMonth() + delta, 1);
   state.selectedDate = null;
   state.calEntries = [];
+  state.dashEntries = [];
+  state.dashExpandedCats = new Set();
   renderCalendar();
   renderDayDetail();
   renderMonthSummary();
+  renderDashboard();
   listenCalendarMonth(state.currentLedger, state.calDate);
-});
-document.getElementById("nextMonth").addEventListener("click", () => {
-  state.calDate = new Date(state.calDate.getFullYear(), state.calDate.getMonth() + 1, 1);
-  state.selectedDate = null;
-  state.calEntries = [];
-  renderCalendar();
-  renderDayDetail();
-  renderMonthSummary();
-  listenCalendarMonth(state.currentLedger, state.calDate);
-});
+  listenDashboardMonth(state.currentLedger, state.calDate);
+}
+document.getElementById("prevMonth").addEventListener("click", () => changeMonth(-1));
+document.getElementById("nextMonth").addEventListener("click", () => changeMonth(1));
 
 /* ====================== 대시보드 화면 ====================== */
 function setDashType(type) {
@@ -1525,20 +1523,8 @@ document.getElementById("dashExpenseBtn").addEventListener("click", () => setDas
 document.getElementById("dashIncomeBtn").addEventListener("click", () => setDashType("income"));
 document.getElementById("dashInvestmentBtn").addEventListener("click", () => setDashType("investment"));
 document.getElementById("dashAllBtn").addEventListener("click", () => setDashType("all"));
-document.getElementById("dashPrevMonth").addEventListener("click", () => {
-  state.dashDate = new Date(state.dashDate.getFullYear(), state.dashDate.getMonth() - 1, 1);
-  state.dashEntries = [];
-  state.dashExpandedCats = new Set();
-  renderDashboard();
-  listenDashboardMonth(state.currentLedger, state.dashDate);
-});
-document.getElementById("dashNextMonth").addEventListener("click", () => {
-  state.dashDate = new Date(state.dashDate.getFullYear(), state.dashDate.getMonth() + 1, 1);
-  state.dashEntries = [];
-  state.dashExpandedCats = new Set();
-  renderDashboard();
-  listenDashboardMonth(state.currentLedger, state.dashDate);
-});
+document.getElementById("dashPrevMonth").addEventListener("click", () => changeMonth(-1));
+document.getElementById("dashNextMonth").addEventListener("click", () => changeMonth(1));
 
 // 가계부별 빠른 추가 버튼 (지현/현제 개인 가계부 대시보드 전용)
 const QUICK_ADD_BUTTONS = {
@@ -1567,8 +1553,8 @@ function renderQuickAddRow() {
       const b = buttons[i];
       let dateStr;
       if (b.dateMode === "firstOfMonth") {
-        const y = state.dashDate.getFullYear();
-        const m = String(state.dashDate.getMonth() + 1).padStart(2, "0");
+        const y = state.calDate.getFullYear();
+        const m = String(state.calDate.getMonth() + 1).padStart(2, "0");
         dateStr = `${y}-${m}-01`;
       } else {
         dateStr = ymd(new Date());
@@ -1833,7 +1819,7 @@ function renderDashboard() {
   renderPayerFilter();
   updateDashTypeVisibility();
 
-  const d = state.dashDate;
+  const d = state.calDate;
   const month = d.getMonth();
   document.getElementById("donutCenterLabel").textContent = `${month + 1}월`;
 
@@ -3498,7 +3484,7 @@ if (state.currentLedger !== "shared") state.chartMetric = "expense";
 updateChartMetricVisibility();
 renderMonthSummary();
 listenCalendarMonth(state.currentLedger, state.calDate);
-listenDashboardMonth(state.currentLedger, state.dashDate);
+listenDashboardMonth(state.currentLedger, state.calDate);
 listenRecurringItems(state.currentLedger);
 listenAssetStructure(ASSET_LEDGER_KEY);
 listenAssetMonthValues(ASSET_LEDGER_KEY, state.assetsDate);
