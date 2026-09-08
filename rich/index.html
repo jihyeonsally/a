@@ -495,6 +495,8 @@
   .recurring-form{ display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; padding:10px 0; }
   .recurring-form-row{ display:flex; gap:6px; }
   .recurring-day-input{ width:64px; flex-shrink:0; }
+  .recurring-form .segmented{ margin-bottom:0; }
+  .recurring-form .segmented button{ padding:8px 0; font-size:13px; }
 
   /* ---------- Search sheet ---------- */
   .search-results{ margin-top:16px; display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; }
@@ -551,7 +553,7 @@
       <div class="summary-top">
         <span class="summary-remaining mono" id="summaryRemaining">0원</span>
         <div class="summary-top-btns">
-          <button class="search-btn" id="recurringBtn" aria-label="고정 지출 관리">🔁</button>
+          <button class="search-btn" id="recurringBtn" aria-label="고정 내역 관리">🔁</button>
           <button class="search-btn" id="searchBtn" aria-label="메모 검색">🔍</button>
         </div>
       </div>
@@ -774,13 +776,13 @@
   </div>
 </div>
 
-<!-- 고정 지출 관리 -->
+<!-- 고정 내역 관리 -->
 <div class="overlay" id="recurringManageOverlay">
   <div class="sheet">
     <div class="sheet-header">
       <button class="close-btn" id="closeRecurringManageSheet">✕</button>
       <div class="sheet-handle"></div>
-      <h3>고정 지출 관리</h3>
+      <h3>고정 내역 관리</h3>
     </div>
     <div class="sheet-body">
       <div id="recurringManageList"></div>
@@ -825,24 +827,26 @@ const ASSET_COLLECTION = "asset_v1"; // 자산 분류/세부항목 구조 및 �
 // 기존에 "지현" 가계부에서 입력해둔 데이터를 그대로 공통 자산으로 이어서 쓴다.
 const ASSET_LEDGER_KEY = "jihyeon";
 
-const RECURRING_COLLECTION = "recurring_v1"; // 가계부별 고정 지출 템플릿
-// 문서: {ledgerId} → { items: [{ id, day, amount, category, memo, payer }] }
-// 매달 달력을 열 때, 그 달에 아직 생성되지 않은(=entries에 같은 recurringId가 없는)
-// 고정 지출 항목을 자동으로 채워 넣는다(지연 생성). 템플릿을 수정해도 이미 생성된
-// 과거 달의 내역은 바뀌지 않고, 그 다음부터 새로 만들어지는 달에만 반영된다.
-// 문서가 아직 없는 가계부는 아래 기본값으로 최초 1회 자동 생성한다.
+const RECURRING_COLLECTION = "recurring_v1"; // 가계부별 고정 내역 템플릿
+// 문서: {ledgerId} → { items: [{ id, type, day, amount, category, memo, payer }] }
+// type은 "expense"(지출) | "income"(수입) | "investment"(투자) — 지현/현제 가계부는
+// 지출만 수기 입력이 가능하므로(대시보드/입력창과 동일한 규칙) 항상 "expense"만 쓴다.
+// type이 없는 옛 데이터는 "expense"로 취급한다.
+// 목록에서 항목을 눌러 확인하면, 현재 달력에 표시된 월에 그 내역을 추가한다(자동 생성 없음).
+// 템플릿을 수정해도 이미 생성된 과거 달의 내역은 바뀌지 않고, 그 다음부터 새로 추가하는
+// 달에만 반영된다. 문서가 아직 없는 가계부는 아래 기본값으로 최초 1회 자동 생성한다.
 const DEFAULT_RECURRING_ITEMS = {
   shared: [
-    { day: 17, amount: 4900, category: "subscription", memo: "네이버멤버십", payer: "jihyeon" },
-    { day: 18, amount: 5900, category: "subscription", memo: "토스프라임", payer: "jihyeon" },
-    { day: 16, amount: 7890, category: "subscription", memo: "쿠팡와우", payer: "jihyeon" },
+    { type: "expense", day: 17, amount: 4900, category: "subscription", memo: "네이버멤버십", payer: "jihyeon" },
+    { type: "expense", day: 18, amount: 5900, category: "subscription", memo: "토스프라임", payer: "jihyeon" },
+    { type: "expense", day: 16, amount: 7890, category: "subscription", memo: "쿠팡와우", payer: "jihyeon" },
   ],
   jihyeon: [
-    { day: 3, amount: 50000, category: "culture", memo: "2G", payer: "jihyeon" },
-    { day: 3, amount: 10000, category: "culture", memo: "바레모타", payer: "jihyeon" },
+    { type: "expense", day: 3, amount: 50000, category: "culture", memo: "2G", payer: "jihyeon" },
+    { type: "expense", day: 3, amount: 10000, category: "culture", memo: "바레모타", payer: "jihyeon" },
   ],
   hyeonje: [
-    { day: 1, amount: 30000, category: "dues", memo: "계비", payer: "hyeonje" },
+    { type: "expense", day: 1, amount: 30000, category: "dues", memo: "계비", payer: "hyeonje" },
   ],
 };
 
@@ -991,6 +995,14 @@ function categoriesForLedger(ledgerId) {
   return CATEGORIES_JIHYEON;
 }
 
+// 고정 내역에서 고를 수 있는 타입. 지현/현제 가계부는 내역 추가 입력창과 마찬가지로
+// 지출만 다루므로(수입/투자 토글 자체가 없음) 고정 내역도 지출만 관리할 수 있다.
+function recurringTypesForLedger(ledgerId) {
+  return ledgerId === "shared" ? ["expense", "income", "investment"] : ["expense"];
+}
+const RECURRING_TYPE_LABEL = { expense: "지출", income: "수입", investment: "투자" };
+const RECURRING_TYPE_SIGN = { expense: "-", income: "+", investment: "₩" };
+
 // 내역 추가 시 타입별로 기본 선택될 카테고리 (수입→급여, 투자→첫 번째 자산 분류, 자산→자산, 공용 지출→식료품)
 function defaultCategoryFor(targetLedger, type) {
   const cats = categoriesForLedger(targetLedger)[type] || [];
@@ -1035,9 +1047,9 @@ const state = {
   chartStartMonth: null, // 차트 화면 표시 범위 시작 "YYYY-MM"
   chartEndMonth: null,   // 차트 화면 표시 범위 종료 "YYYY-MM" (기본값: 오늘이 속한 연월)
   chartExpandedMonths: new Set(), // 차트 화면 하단 목록에서 펼쳐진 월(monthKey) 목록
-  recurringItems: [], // 현재 가계부의 고정 지출 템플릿 목록
+  recurringItems: [], // 현재 가계부의 고정 내역 템플릿 목록
   recurringUnsub: null,
-  recurringManageDraft: { mode: null, day: "", amount: "", category: null, memo: "", payer: "jihyeon" }, // mode: null | "add" | 수정 중인 항목 id
+  recurringManageDraft: { mode: null, type: "expense", day: "", amount: "", category: null, memo: "", payer: "jihyeon" }, // mode: null | "add" | 수정 중인 항목 id
 };
 
 /* ====================== Firestore 연동 (월별 문서 샤딩) ======================
@@ -1081,7 +1093,7 @@ function listenDashboardMonth(ledgerId, dateObj) {
 }
 
 const recurringSeedInFlight = new Set(); // 시딩 도중 같은 가계부에 대해 중복 시딩(레이스)이 일어나지 않도록 막는다.
-const recurringGenInFlight = new Set(); // 같은 달에 대해 고정 지출 생성이 중복 실행되지 않도록 막는다.
+const recurringGenInFlight = new Set(); // 같은 달에 대해 고정 내역 생성이 중복 실행되지 않도록 막는다.
 
 function listenRecurringItems(ledgerId) {
   if (state.recurringUnsub) state.recurringUnsub();
@@ -1089,7 +1101,7 @@ function listenRecurringItems(ledgerId) {
     if (!snap.exists && DEFAULT_RECURRING_ITEMS[ledgerId]) {
       if (recurringSeedInFlight.has(ledgerId)) return;
       recurringSeedInFlight.add(ledgerId);
-      // 문서가 아직 없는 가계부는 기본 고정 지출 목록으로 최초 1회 채워둔다.
+      // 문서가 아직 없는 가계부는 기본 고정 내역 목록으로 최초 1회 채워둔다.
       const seeded = DEFAULT_RECURRING_ITEMS[ledgerId].map(it => ({
         ...it,
         id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
@@ -1097,7 +1109,7 @@ function listenRecurringItems(ledgerId) {
       try {
         await saveRecurringItems(ledgerId, seeded);
       } catch (err) {
-        console.error("고정 지출 기본값 저장 실패:", err);
+        console.error("고정 내역 기본값 저장 실패:", err);
       } finally {
         recurringSeedInFlight.delete(ledgerId);
       }
@@ -1115,8 +1127,8 @@ async function saveRecurringItems(ledgerId, items) {
   await db.collection(RECURRING_COLLECTION).doc(ledgerId).set({ items });
 }
 
-// 고정 지출 관리 목록에서 항목을 누르고 확인 팝업에서 "예"를 누르면,
-// 현재 달력에 표시된 월에 그 지출을 추가한다. 자동으로는 추가되지 않는다.
+// 고정 내역 관리 목록에서 항목을 누르고 확인 팝업에서 "예"를 누르면,
+// 현재 달력에 표시된 월에 그 내역(지출/수입/투자)을 추가한다. 자동으로는 추가되지 않는다.
 // 그 달에 이미 같은 항목(recurringId)이 추가되어 있으면 오류를 안내하고 추가하지 않는다.
 async function addRecurringItemToCurrentMonth(itemId) {
   const it = state.recurringItems.find(x => x.id === itemId);
@@ -1132,14 +1144,14 @@ async function addRecurringItemToCurrentMonth(itemId) {
     const snap = await db.collection(COLLECTION).doc(docId).get();
     const existing = (snap.data() && snap.data().entries) || [];
     if (existing.some(e => e.recurringId === it.id)) {
-      alert("이미 이번 달에 추가된 고정 지출입니다.");
+      alert("이미 이번 달에 추가된 고정 내역입니다.");
       return;
     }
     const day = Math.min(Number(it.day) || 1, daysInMonth);
     const newEntry = {
       id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
       date: `${monthKey}-${String(day).padStart(2, "0")}`,
-      type: "expense",
+      type: it.type || "expense",
       amount: Number(it.amount) || 0,
       category: it.category,
       payer: ledgerId === "shared" ? (it.payer || "jihyeon") : ledgerId,
@@ -1151,7 +1163,7 @@ async function addRecurringItemToCurrentMonth(itemId) {
       entries: firebase.firestore.FieldValue.arrayUnion(newEntry)
     }, { merge: true });
   } catch (err) {
-    console.error("고정 지출 추가 실패:", err);
+    console.error("고정 내역 추가 실패:", err);
     alert("추가에 실패했습니다.\n" + err.message);
   } finally {
     recurringGenInFlight.delete(docId);
@@ -2294,23 +2306,29 @@ document.getElementById("assetOwnerFilter").addEventListener("click", (e) => {
   totalEl.addEventListener("pointercancel", hide);
 })();
 
-/* ---------- 고정 지출 관리 모달 ---------- */
+/* ---------- 고정 내역 관리 모달 ---------- */
 // recurringManageDraft.mode: null(입력창 없음) | "add"(새 항목 추가) | 수정 중인 항목의 id
 function renderRecurringManageList() {
   const wrap = document.getElementById("recurringManageList");
   const draft = state.recurringManageDraft;
   const isShared = state.currentLedger === "shared";
-  const cats = categoriesForLedger(state.currentLedger).expense || [];
+  const availableTypes = recurringTypesForLedger(state.currentLedger);
+  const allCats = categoriesForLedger(state.currentLedger);
+  const catsForDraftType = allCats[draft.type] || [];
 
   const formHtml = () => `
     <div class="recurring-form">
+      ${availableTypes.length > 1 ? `
+      <div class="segmented" id="recurringDraftTypeSegment">
+        ${availableTypes.map(t => `<button type="button" data-type="${t}" class="${t} ${draft.type === t ? "active" : ""}">${RECURRING_TYPE_LABEL[t]}</button>`).join("")}
+      </div>` : ""}
       <div class="recurring-form-row">
         <input type="number" min="1" max="31" id="recurringDraftDay" class="manage-draft-input recurring-day-input" placeholder="일" value="${escapeHtml(String(draft.day || ""))}" autocomplete="off" />
         <input type="text" inputmode="numeric" id="recurringDraftAmount" class="manage-draft-input" placeholder="금액" value="${draft.amount ? fmtNum(draft.amount) : ""}" autocomplete="off" />
       </div>
       <div class="field-label">카테고리</div>
       <div class="chip-row" id="recurringDraftCategoryChips">
-        ${cats.map(c => `<button type="button" class="chip ${draft.category === c.id ? "active" : ""}" data-cat="${c.id}">${c.icon} ${escapeHtml(c.label)}</button>`).join("")}
+        ${catsForDraftType.map(c => `<button type="button" class="chip ${draft.category === c.id ? "active" : ""}" data-cat="${c.id}">${c.icon} ${escapeHtml(c.label)}</button>`).join("")}
       </div>
       ${isShared ? `
       <div class="field-label">결제자</div>
@@ -2329,14 +2347,17 @@ function renderRecurringManageList() {
     if (draft.mode === it.id) {
       return `<div class="manage-item-row" style="align-items:flex-start;">${formHtml()}</div>`;
     }
+    const type = it.type || "expense";
+    const cats = allCats[type] || [];
     const cat = cats.find(c => c.id === it.category);
     const catLabel = cat ? cat.label : it.category;
     const catIcon = cat ? cat.icon : "📦";
     const payerLabel = isShared ? ` · ${LEDGER_SHORT_LABEL[it.payer || "jihyeon"]}` : "";
+    const sign = RECURRING_TYPE_SIGN[type];
     return `
       <div class="manage-item-row" data-recurring-id="${it.id}">
         <span class="manage-name-wrap" data-add-recurring="${it.id}">
-          <span class="manage-name">${it.day}일 · ${catIcon} ${escapeHtml(catLabel)} · ${fmtNum(it.amount)}원${it.memo ? " · " + escapeHtml(it.memo) : ""}${payerLabel}</span>
+          <span class="manage-name">${it.day}일 · ${catIcon} ${escapeHtml(catLabel)} · ${sign}${fmtNum(it.amount)}원${it.memo ? " · " + escapeHtml(it.memo) : ""}${payerLabel}</span>
         </span>
         <button class="manage-edit-btn" data-edit-recurring="${it.id}">수정</button>
         <button class="manage-del-btn" data-del-recurring="${it.id}">삭제</button>
@@ -2345,10 +2366,10 @@ function renderRecurringManageList() {
 
   const addRow = draft.mode === "add"
     ? `<div class="manage-item-row" style="align-items:flex-start;">${formHtml()}</div>`
-    : `<button class="manage-add-btn manage-add-cat-btn" id="addRecurringBtn">+ 고정 지출 추가</button>`;
+    : `<button class="manage-add-btn manage-add-cat-btn" id="addRecurringBtn">+ 고정 내역 추가</button>`;
 
   wrap.innerHTML = (state.recurringItems.length === 0 && draft.mode !== "add"
-    ? `<div class="day-detail-empty">등록된 고정 지출이 없습니다.</div>`
+    ? `<div class="day-detail-empty">등록된 고정 내역이 없습니다.</div>`
     : rows) + addRow;
 
   wrap.querySelectorAll("[data-del-recurring]").forEach(btn => {
@@ -2358,7 +2379,7 @@ function renderRecurringManageList() {
     btn.addEventListener("click", () => {
       const it = state.recurringItems.find(x => x.id === btn.dataset.editRecurring);
       if (!it) return;
-      state.recurringManageDraft = { mode: it.id, day: it.day, amount: it.amount, category: it.category, memo: it.memo || "", payer: it.payer || "jihyeon" };
+      state.recurringManageDraft = { mode: it.id, type: it.type || "expense", day: it.day, amount: it.amount, category: it.category, memo: it.memo || "", payer: it.payer || "jihyeon" };
       renderRecurringManageList();
     });
   });
@@ -2373,7 +2394,9 @@ function renderRecurringManageList() {
   });
   const addBtn = document.getElementById("addRecurringBtn");
   if (addBtn) addBtn.addEventListener("click", () => {
-    state.recurringManageDraft = { mode: "add", day: "", amount: "", category: (cats[0] && cats[0].id) || null, memo: "", payer: "jihyeon" };
+    const type = availableTypes[0];
+    const cats = allCats[type] || [];
+    state.recurringManageDraft = { mode: "add", type, day: "", amount: "", category: (cats[0] && cats[0].id) || null, memo: "", payer: "jihyeon" };
     renderRecurringManageList();
   });
 
@@ -2393,6 +2416,19 @@ function renderRecurringManageList() {
   const memoInput = document.getElementById("recurringDraftMemo");
   if (memoInput) {
     memoInput.addEventListener("input", (e) => { state.recurringManageDraft.memo = e.target.value; });
+  }
+  const typeSegmentWrap = document.getElementById("recurringDraftTypeSegment");
+  if (typeSegmentWrap) {
+    typeSegmentWrap.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-type]");
+      if (!btn) return;
+      const type = btn.dataset.type;
+      if (type === state.recurringManageDraft.type) return;
+      state.recurringManageDraft.type = type;
+      const cats = allCats[type] || [];
+      state.recurringManageDraft.category = (cats[0] && cats[0].id) || null;
+      renderRecurringManageList();
+    });
   }
   const catChipsWrap = document.getElementById("recurringDraftCategoryChips");
   if (catChipsWrap) {
@@ -2416,7 +2452,7 @@ function renderRecurringManageList() {
   if (confirmBtn) confirmBtn.addEventListener("click", confirmRecurringDraft);
   const cancelBtn = document.getElementById("recurringDraftCancelBtn");
   if (cancelBtn) cancelBtn.addEventListener("click", () => {
-    state.recurringManageDraft = { mode: null, day: "", amount: "", category: null, memo: "", payer: "jihyeon" };
+    state.recurringManageDraft = { mode: null, type: "expense", day: "", amount: "", category: null, memo: "", payer: "jihyeon" };
     renderRecurringManageList();
   });
 }
@@ -2430,23 +2466,24 @@ async function confirmRecurringDraft() {
     return;
   }
   const ledgerId = state.currentLedger;
+  const type = recurringTypesForLedger(ledgerId).includes(draft.type) ? draft.type : "expense";
   const payer = ledgerId === "shared" ? (draft.payer || "jihyeon") : ledgerId;
   if (draft.mode === "add") {
     state.recurringItems.push({
       id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
-      day, amount, category: draft.category, memo: draft.memo || "", payer,
+      type, day, amount, category: draft.category, memo: draft.memo || "", payer,
     });
   } else {
     const it = state.recurringItems.find(x => x.id === draft.mode);
     if (it) {
-      it.day = day; it.amount = amount; it.category = draft.category; it.memo = draft.memo || ""; it.payer = payer;
+      it.type = type; it.day = day; it.amount = amount; it.category = draft.category; it.memo = draft.memo || ""; it.payer = payer;
     }
   }
-  state.recurringManageDraft = { mode: null, day: "", amount: "", category: null, memo: "", payer: "jihyeon" };
+  state.recurringManageDraft = { mode: null, type: "expense", day: "", amount: "", category: null, memo: "", payer: "jihyeon" };
   try {
     await saveRecurringItems(ledgerId, state.recurringItems);
   } catch (err) {
-    console.error("고정 지출 저장 실패:", err);
+    console.error("고정 내역 저장 실패:", err);
     alert("저장에 실패했습니다.\n" + err.message);
   }
   renderRecurringManageList();
@@ -2454,20 +2491,20 @@ async function confirmRecurringDraft() {
 
 async function deleteRecurringItem(id) {
   const it = state.recurringItems.find(x => x.id === id);
-  if (!confirm(`"${it ? (it.day + "일 " + fmtNum(it.amount) + "원") : ""}" 고정 지출을 삭제할까요?\n(이미 생성된 과거 내역은 남아있습니다.)`)) return;
+  if (!confirm(`"${it ? (it.day + "일 " + fmtNum(it.amount) + "원") : ""}" 고정 내역을 삭제할까요?\n(이미 생성된 과거 내역은 남아있습니다.)`)) return;
   const ledgerId = state.currentLedger;
   state.recurringItems = state.recurringItems.filter(x => x.id !== id);
   try {
     await saveRecurringItems(ledgerId, state.recurringItems);
   } catch (err) {
-    console.error("고정 지출 삭제 실패:", err);
+    console.error("고정 내역 삭제 실패:", err);
     alert("삭제에 실패했습니다.\n" + err.message);
   }
   renderRecurringManageList();
 }
 
 function openRecurringManageModal() {
-  state.recurringManageDraft = { mode: null, day: "", amount: "", category: null, memo: "", payer: "jihyeon" };
+  state.recurringManageDraft = { mode: null, type: "expense", day: "", amount: "", category: null, memo: "", payer: "jihyeon" };
   renderRecurringManageList();
   document.getElementById("recurringManageOverlay").classList.add("show");
 }
