@@ -1338,13 +1338,11 @@ function ymd(d) {
   return `${y}-${m}-${day}`;
 }
 function fmtNum(n) { return Number(n).toLocaleString("ko-KR"); }
-// 차트 세로축 눈금처럼 좁은 공간에 표시할 때 쓰는 축약 표기 (예: 1,500,000 → 150만)
+// 차트에 표시할 때 쓰는 축약 표기. 만원 단위로 반올림해서 "12만"처럼 간단히 보여준다
+// (예: 1,538,000 → 154만).
 function fmtCompact(n) {
   const v = Number(n);
-  const abs = Math.abs(v);
-  if (abs >= 100000000) return `${(v / 100000000).toFixed(abs % 100000000 === 0 ? 0 : 1)}억`;
-  if (abs >= 10000) return `${(v / 10000).toFixed(abs % 10000 === 0 ? 0 : 1)}만`;
-  return fmtNum(v);
+  return `${fmtNum(Math.round(v / 10000))}만`;
 }
 function weekdayClass(dow) {
   return dow === 0 ? "wd-sun" : dow === 6 ? "wd-sat" : "";
@@ -2907,9 +2905,11 @@ initAssetManageDrag();
 
 /* ---------- 차트 화면 ---------- */
 
-// 값 라벨은 선/영역 채우기와 겹치지 않도록 항상 점 위쪽에 그린다.
+// 값 라벨은 선/영역 채우기와 겹치지 않도록 항상 점 위쪽에 그리되, 차트 맨 위쪽
+// 점이라도 라벨이 SVG 바깥(위쪽 흰 배경 밖)으로 잘리지 않도록 최소 y 아래로는
+// 내려가지 않게 한다.
 function valueLabelY(y) {
-  return y - 6;
+  return Math.max(y - 6, 10);
 }
 
 // "전체" 콤보 차트와 개별 지표(자산/지출/수입/투자) 그래프에서 항상 같은 선 모양을 쓰도록
@@ -2941,7 +2941,7 @@ function edgeAwareAnchor(i, n) {
 
 function renderTrendChart(svg, series, metric, chartWidth) {
   const W = chartWidth || 320, H = 180;
-  const PAD_L = 34, PAD_R = 8, PAD_TOP = 18, PAD_BOTTOM = 22;
+  const PAD_L = 34, PAD_R = 8, PAD_TOP = 24, PAD_BOTTOM = 22;
   const plotH = H - PAD_TOP - PAD_BOTTOM;
   const color = metric === "expense" ? "var(--expense)"
     : metric === "income" ? "var(--income)"
@@ -2973,7 +2973,7 @@ function renderTrendChart(svg, series, metric, chartWidth) {
     svg.innerHTML = `
       ${axisHtml}
       <circle cx="${((W + PAD_L) / 2).toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${color}" />
-      <text x="${((W + PAD_L) / 2).toFixed(1)}" y="${valueLabelY(y).toFixed(1)}" font-size="8" font-weight="600" fill="${color}" text-anchor="middle">${fmtNum(series[0].value)}</text>
+      <text x="${((W + PAD_L) / 2).toFixed(1)}" y="${valueLabelY(y).toFixed(1)}" font-size="8" font-weight="600" fill="${color}" text-anchor="middle">${fmtCompact(series[0].value)}</text>
       <text x="${((W + PAD_L) / 2).toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="middle">${firstLabel}</text>`;
     return;
   }
@@ -2987,7 +2987,7 @@ function renderTrendChart(svg, series, metric, chartWidth) {
   const dots = series.map((s, i) => `<circle cx="${xOf(i).toFixed(1)}" cy="${yOf(s.value).toFixed(1)}" r="2.5" fill="${color}" />`).join("");
   const valueLabels = series.map((s, i) => {
     const x = xOf(i), y = yOf(s.value);
-    return `<text x="${x.toFixed(1)}" y="${valueLabelY(y).toFixed(1)}" font-size="7" font-weight="600" fill="${color}" text-anchor="${edgeAwareAnchor(i, n)}">${fmtNum(s.value)}</text>`;
+    return `<text x="${x.toFixed(1)}" y="${valueLabelY(y).toFixed(1)}" font-size="7" font-weight="600" fill="${color}" text-anchor="${edgeAwareAnchor(i, n)}">${fmtCompact(s.value)}</text>`;
   }).join("");
   // 달 수만큼 폭을 확보해뒀기 때문에(MIN_CHART_MONTH_WIDTH) 처음/끝뿐 아니라 매달 라벨을 표시한다.
   const monthLabels = series.map((s, i) => {
