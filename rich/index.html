@@ -2022,7 +2022,10 @@ function buildMonthRange(startKey, endKey) {
 // 더 이상 유효하지 않으면 기본값(시작=가장 이른 달, 종료=오늘)으로 되돌린다.
 function populateMonthSelectors(startElId, endElId, startStateKey, endStateKey) {
   const todayKey = monthKeyOf(new Date());
-  const dataKeys = state.assetsMonths.map(m => m.monthKey);
+  // 지출/수입/투자 내역이 하나도 없는 달(빈 문서만 남아있는 달)은 범위 계산에서 제외한다.
+  const dataKeys = state.assetsMonths
+    .filter(m => (m.expense || 0) > 0 || (m.income || 0) > 0 || (m.investment || 0) > 0)
+    .map(m => m.monthKey);
   const allKeys = dataKeys.concat([todayKey]);
   const minKey = allKeys.reduce((a, b) => (a < b ? a : b));
   const maxKey = allKeys.reduce((a, b) => (a > b ? a : b));
