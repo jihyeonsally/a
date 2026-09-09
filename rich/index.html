@@ -128,6 +128,12 @@
   }
   .month-nav h2{ font-size: 16px; margin:0 0 0 4px; font-weight:700; line-height:1; }
   .month-nav .navbtns{ display:flex; align-items:center; gap:4px; }
+  .month-nav-left{ display:flex; align-items:center; gap:6px; min-width:0; }
+  .asof-label{ font-size:11px; color: var(--text-dim); flex-shrink:0; }
+  .asof-select{
+    font-size:11px; color: var(--text-dim); border:1px solid var(--border); border-radius:6px;
+    padding:2px 4px; background: var(--card); font-family:inherit; flex-shrink:0;
+  }
   .navbtn{
     width:32px; height:32px; border-radius:50%; border:1px solid var(--border);
     background: var(--card); display:flex; align-items:center; justify-content:center;
@@ -630,7 +636,11 @@
   <!-- Screen 3: Asset entries (월별 자산 내역 목록) -->
   <div class="screen" id="screen-assets">
     <div class="month-nav">
-      <h2 id="assetsMonthLabel"></h2>
+      <div class="month-nav-left">
+        <h2 id="assetsMonthLabel"></h2>
+        <span class="asof-label">기준일</span>
+        <select id="assetsAsOfDaySelect" class="asof-select"></select>
+      </div>
       <div class="navbtns">
         <button class="navbtn" id="assetsPrevMonth">‹</button>
         <button class="navbtn" id="assetsNextMonth">›</button>
@@ -1038,6 +1048,7 @@ const state = {
   assetItems: [],       // [{ id, categoryId, label }] 자산 세부항목 (구조, 월과 무관)
   assetExpandedCats: new Set(), // 자산 화면에서 펼쳐진 분류 id 목록
   assetMonthValues: {}, // { [itemId]: amount } 현재 보고 있는 월의 세부항목별 최신 금액
+  assetAsOfDay: null, // 현재 보고 있는 월의 자산 데이터 기준일 (1~31, 선택 안 했으면 null)
   assetOwnerFilter: "all", // 자산 화면 목록 필터 ("all" | "shared" | "jihyeon" | "hyeonje")
   assetStructureUnsub: null,
   assetValuesUnsub: null,
@@ -1205,6 +1216,7 @@ function listenAssetMonthValues(ledgerId, dateObj) {
   state.assetValuesUnsub = db.collection(ASSET_COLLECTION).doc(docId).onSnapshot((snap) => {
     const data = snap.data();
     state.assetMonthValues = (data && data.values) || {};
+    state.assetAsOfDay = (data && data.asOfDay) || null;
     renderAssetsScreen();
     flashSync();
   }, (err) => {
@@ -1222,6 +1234,12 @@ async function saveAssetStructure() {
 async function saveAssetValue(ledgerId, monthKey, itemId, value) {
   const docId = monthDocId(ledgerId, monthKey);
   await db.collection(ASSET_COLLECTION).doc(docId).set({ values: { [itemId]: value } }, { merge: true });
+}
+
+// 그 달의 자산 데이터를 입력한 기준일(1~31)을 저장한다.
+async function saveAssetAsOfDay(ledgerId, monthKey, day) {
+  const docId = monthDocId(ledgerId, monthKey);
+  await db.collection(ASSET_COLLECTION).doc(docId).set({ asOfDay: day }, { merge: true });
 }
 
 function flashSync() {
@@ -2157,6 +2175,14 @@ function renderAssetsScreen() {
   const d = state.assetsDate;
   document.getElementById("assetsMonthLabel").textContent = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 
+  // 기준일(그 달 자산 데이터를 입력한 날짜) 선택 — 달마다 일수가 다르므로 옵션을 매번 새로 채운다.
+  const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  const asOfSelect = document.getElementById("assetsAsOfDaySelect");
+  const dayOptionsHtml = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+    .map(day => `<option value="${day}">${day}일</option>`).join("");
+  asOfSelect.innerHTML = `<option value="">선택</option>${dayOptionsHtml}`;
+  asOfSelect.value = state.assetAsOfDay || "";
+
   // 분류명에 "제외"가 포함된 분류의 항목은 자산 합계에서 뺀다 (목록에는 계속 표시됨).
   const excludedIds = excludedAssetItemIds();
   let total = 0;
@@ -2272,16 +2298,30 @@ function renderAssetsScreen() {
 document.getElementById("assetsPrevMonth").addEventListener("click", () => {
   state.assetsDate = new Date(state.assetsDate.getFullYear(), state.assetsDate.getMonth() - 1, 1);
   state.assetMonthValues = {};
+  state.assetAsOfDay = null;
   renderAssetsScreen();
   listenAssetMonthValues(ASSET_LEDGER_KEY, state.assetsDate);
 });
 document.getElementById("assetsNextMonth").addEventListener("click", () => {
   state.assetsDate = new Date(state.assetsDate.getFullYear(), state.assetsDate.getMonth() + 1, 1);
   state.assetMonthValues = {};
+  state.assetAsOfDay = null;
   renderAssetsScreen();
   listenAssetMonthValues(ASSET_LEDGER_KEY, state.assetsDate);
 });
 document.getElementById("manageAssetBtn").addEventListener("click", openAssetManageModal);
+
+document.getElementById("assetsAsOfDaySelect").addEventListener("change", async (e) => {
+  const day = e.target.value ? Number(e.target.value) : null;
+  state.assetAsOfDay = day;
+  try {
+    await saveAssetAsOfDay(ASSET_LEDGER_KEY, monthKeyOf(state.assetsDate), day);
+    flashSync();
+  } catch (err) {
+    console.error("기준일 저장 실패:", err);
+    alert("기준일 저장에 실패했습니다.\n" + err.message);
+  }
+});
 
 document.getElementById("assetOwnerFilter").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
