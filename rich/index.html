@@ -173,8 +173,8 @@
   .day-num{ font-size:12px; font-weight:600; color: var(--text); text-align:center; }
   .day-cell.today .day-num{ color: var(--accent); }
   .day-entries{
-    display:flex; flex-direction:row; flex-wrap:nowrap; align-items:center; justify-content:center;
-    gap:4px; width:100%; overflow:hidden; font-size:9px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1px; width:100%; overflow:hidden; font-size:9px;
   }
   .day-line{
     font-size:inherit; line-height:1.3; overflow:hidden; text-overflow:ellipsis;
@@ -1362,6 +1362,14 @@ function fmtCompact(n) {
   const v = Number(n);
   return `${fmtNum(Math.round(v / 10000))}만`;
 }
+// 달력 하루 칸처럼 폭이 좁은 곳에서 10만원을 넘으면 콤마 표기가 "..."로 잘리므로,
+// 그 경우 천원 단위는 버리고 "10.5만"처럼 만원 단위로 축약한다 (10만원 미만은 그대로).
+function fmtDayAmount(n) {
+  const v = Number(n);
+  if (v < 100000) return fmtNum(v);
+  const man = Math.floor(v / 1000) / 10;
+  return `${Number.isInteger(man) ? man : man.toFixed(1)}만`;
+}
 function weekdayClass(dow) {
   return dow === 0 ? "wd-sun" : dow === 6 ? "wd-sat" : "";
 }
@@ -1374,6 +1382,25 @@ function dayWithWeekday(dateStr) {
 }
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// 달력 하루 칸의 금액 폰트 크기를 정한다. "만"(전각 문자)은 숫자 글자보다 넓어서
+// 글자 수만 세는 방식으로는 정확히 맞지 않으므로, 실제 렌더 폭을 재서(캔버스) 가장 좁은
+// 화면(360px, 7열 기준)에서도 안 잘리고 들어가는 가장 큰 크기를 고른다. 지출/수입/투자를
+// 한 줄에 다 욱여넣으면(가로 나열) 폭이 부족해 아무리 줄여도 안 들어갈 수 있으므로 세로로
+// 쌓아서(day-entries가 flex-direction:column) 줄마다 자기 폭만 맞으면 되게 한다.
+const DAY_ENTRIES_FONT_CANDIDATES = [9, 8, 7.5, 7, 6.5, 6, 5.5, 5];
+const DAY_ENTRIES_SAFE_WIDTH = 30; // px, 360px 폭 화면에서 실측한 칸 내부 여유폭에 약간의 여백을 둔 값
+let dayEntriesMeasureCtx = null;
+function fitDayEntriesFontSize(dayParts) {
+  if (dayParts.length === 0) return DAY_ENTRIES_FONT_CANDIDATES[0];
+  if (!dayEntriesMeasureCtx) dayEntriesMeasureCtx = document.createElement("canvas").getContext("2d");
+  for (const size of DAY_ENTRIES_FONT_CANDIDATES) {
+    dayEntriesMeasureCtx.font = `600 ${size}px NeoDunggeunmo`;
+    const widestPart = Math.max(...dayParts.map(p => dayEntriesMeasureCtx.measureText(p.text).width));
+    if (widestPart <= DAY_ENTRIES_SAFE_WIDTH) return size;
+  }
+  return DAY_ENTRIES_FONT_CANDIDATES[DAY_ENTRIES_FONT_CANDIDATES.length - 1];
 }
 
 function renderCalendar() {
@@ -1408,17 +1435,13 @@ function renderCalendar() {
     });
 
     const dayParts = [];
-    if (expenseTotal > 0) dayParts.push({ cls: "expense", text: `-${fmtNum(expenseTotal)}` });
-    if (incomeTotal > 0) dayParts.push({ cls: "income", text: `+${fmtNum(incomeTotal)}` });
-    if (investmentTotal > 0) dayParts.push({ cls: "investment", text: `₩${fmtNum(investmentTotal)}` });
+    if (expenseTotal > 0) dayParts.push({ cls: "expense", text: `-${fmtDayAmount(expenseTotal)}` });
+    if (incomeTotal > 0) dayParts.push({ cls: "income", text: `+${fmtDayAmount(incomeTotal)}` });
+    if (investmentTotal > 0) dayParts.push({ cls: "investment", text: `₩${fmtDayAmount(investmentTotal)}` });
 
-    // 금액 자릿수가 늘어나면 한 줄에 다 들어오도록 폰트 크기를 줄인다.
-    const totalLen = dayParts.reduce((sum, p) => sum + p.text.length, 0);
-    let entriesFontSize = 9;
-    if (totalLen > 20) entriesFontSize = 6;
-    else if (totalLen > 16) entriesFontSize = 6.5;
-    else if (totalLen > 12) entriesFontSize = 7;
-    else if (totalLen > 8) entriesFontSize = 8;
+    // 금액이 길어지면 한 줄에 다 들어오도록 폰트 크기를 줄인다. "만"(전각 문자)은 숫자보다
+    // 넓어서 글자 수만으로는 정확히 맞추기 어려우므로, 실제 렌더 폭을 재서 딱 맞는 크기를 고른다.
+    const entriesFontSize = fitDayEntriesFontSize(dayParts);
 
     const linesHtml = dayParts.map(p => `<div class="day-line ${p.cls}">${p.text}</div>`).join("");
 
