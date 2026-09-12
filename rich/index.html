@@ -2206,11 +2206,15 @@ function renderAssetsScreen() {
   asOfSelect.innerHTML = `<option value="">선택</option>${dayOptionsHtml}`;
   asOfSelect.value = state.assetAsOfDay || "";
 
-  // 분류명에 "제외"가 포함된 분류의 항목은 자산 합계에서 뺀다 (목록에는 계속 표시됨).
+  // 분류명에 "제외"가 포함된 분류의 항목은 자산 합계에서 빼고, 상단 토글(전체/지현/현제/공용)
+  // 필터에 맞는 항목만 더한다 — 아래 목록에 실제로 표시되는 항목들의 합과 항상 같다.
   const excludedIds = excludedAssetItemIds();
+  const filter = state.assetOwnerFilter;
   let total = 0;
-  Object.entries(state.assetMonthValues).forEach(([itemId, v]) => {
-    if (!excludedIds.has(itemId)) total += Number(v) || 0;
+  state.assetItems.forEach(it => {
+    if (excludedIds.has(it.id)) return;
+    if (filter !== "all" && (it.ownerLedger || "shared") !== filter) return;
+    total += Number(state.assetMonthValues[it.id]) || 0;
   });
   document.getElementById("assetsMonthTotal").textContent = `${fmtNum(total)}원`;
 
@@ -2220,7 +2224,6 @@ function renderAssetsScreen() {
     return;
   }
 
-  const filter = state.assetOwnerFilter;
   const filteredItems = filter === "all"
     ? state.assetItems
     : state.assetItems.filter(it => (it.ownerLedger || "shared") === filter);
