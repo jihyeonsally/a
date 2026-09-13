@@ -1987,9 +1987,12 @@ function renderDashboard() {
 function renderDashboardAllTab(applyPayerFilter) {
   document.getElementById("dashWarning").style.display = "none";
 
-  const incomeTotal = applyPayerFilter(state.dashEntries.filter(e => e.type === "income")).reduce((sum, e) => sum + Number(e.amount), 0);
-  const expenseTotal = applyPayerFilter(state.dashEntries.filter(e => e.type === "expense")).reduce((sum, e) => sum + Number(e.amount), 0);
-  const investmentTotal = applyPayerFilter(state.dashEntries.filter(e => e.type === "investment")).reduce((sum, e) => sum + Number(e.amount), 0);
+  const filteredExpense = applyPayerFilter(state.dashEntries.filter(e => e.type === "expense"));
+  const filteredIncome = applyPayerFilter(state.dashEntries.filter(e => e.type === "income"));
+  const filteredInvestment = applyPayerFilter(state.dashEntries.filter(e => e.type === "investment"));
+  const incomeTotal = filteredIncome.reduce((sum, e) => sum + Number(e.amount), 0);
+  const expenseTotal = filteredExpense.reduce((sum, e) => sum + Number(e.amount), 0);
+  const investmentTotal = filteredInvestment.reduce((sum, e) => sum + Number(e.amount), 0);
 
   const dashTotalEl = document.getElementById("dashTotal");
   const netTotal = incomeTotal - expenseTotal - investmentTotal;
@@ -2028,16 +2031,92 @@ function renderDashboardAllTab(applyPayerFilter) {
     renderDonutChart(chartEl, calloutsEl, catsWithAmount, totals, donutDenom, "all", remainingShare, segmentColors);
   }
 
-  document.getElementById("catList").innerHTML = `
-    <div class="cat-row-wrap"><div class="cat-row" style="cursor:default;">
-      <span class="icon">💸</span><span class="name">지출</span><span class="amt expense">-${fmtNum(expenseTotal)}원</span>
-    </div></div>
-    <div class="cat-row-wrap"><div class="cat-row" style="cursor:default;">
-      <span class="icon">💰</span><span class="name">수입</span><span class="amt income">+${fmtNum(incomeTotal)}원</span>
-    </div></div>
-    <div class="cat-row-wrap"><div class="cat-row" style="cursor:default;">
-      <span class="icon">📈</span><span class="name">투자</span><span class="amt investment">₩${fmtNum(investmentTotal)}원</span>
-    </div></div>`;
+  // 지출/수입/투자 각 행을 눌러서 펼치면 그 타입의 카테고리별 내역을 보여주고,
+  // 카테고리를 한 번 더 누르면 개별 내역까지 펼쳐볼 수 있다 (일반 지출/수입/투자 탭과 동일한 방식).
+  const TYPE_META = {
+    expense_total: { type: "expense", label: "지출", icon: "💸", entries: filteredExpense, total: expenseTotal, sign: "-", cls: "expense" },
+    income_total: { type: "income", label: "수입", icon: "💰", entries: filteredIncome, total: incomeTotal, sign: "+", cls: "income" },
+    investment_total: { type: "investment", label: "투자", icon: "📈", entries: filteredInvestment, total: investmentTotal, sign: "₩", cls: "investment" },
+  };
+
+  document.getElementById("catList").innerHTML = Object.keys(TYPE_META).map(typeId => {
+    const meta = TYPE_META[typeId];
+    const expanded = state.dashExpandedCats.has(typeId);
+    let breakdownHtml = "";
+    if (expanded) {
+      const cats = categoriesForLedger(state.currentLedger)[meta.type] || [];
+      const catTotals = {}, entriesByCat = {};
+      cats.forEach(c => { catTotals[c.id] = 0; entriesByCat[c.id] = []; });
+      meta.entries.forEach(e => {
+        catTotals[e.category] = (catTotals[e.category] || 0) + Number(e.amount);
+        (entriesByCat[e.category] = entriesByCat[e.category] || []).push(e);
+      });
+      const catsWithAmt = cats.filter(c => catTotals[c.id] > 0).sort((a, b) => catTotals[b.id] - catTotals[a.id]);
+      const rowsHtml = catsWithAmt.map(c => {
+        const subKey = `${typeId}:${c.id}`;
+        const subExpanded = state.dashExpandedCats.has(subKey);
+        const subEntries = (entriesByCat[c.id] || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+        const subEntriesHtml = subEntries.map(e => {
+          const dateLabel = dayWithWeekday(e.date);
+          const memoHtml = e.memo ? escapeHtml(e.memo) : "";
+          const payer = e.payer || state.currentLedger;
+          const payerTag = `<span class="owner-tag owner-${payer}">${LEDGER_SHORT_LABEL[payer]}</span>`;
+          return `
+            <div class="cat-entry-row" data-id="${e.id}">
+              <span class="search-date mono">${dateLabel}</span>
+              ${payerTag}
+              <span class="entry-memo">${memoHtml}</span>
+              <span class="amt ${meta.cls}">${meta.sign}${fmtNum(e.amount)}원</span>
+            </div>`;
+        }).join("");
+        return `
+          <div class="cat-row-wrap">
+            <button class="cat-row" data-subcat="${subKey}">
+              <span class="icon">${c.icon}</span>
+              <span class="name">${escapeHtml(c.label)}</span>
+              <span class="amt ${meta.cls}">${meta.sign}${fmtNum(catTotals[c.id])}원</span>
+              <span class="chevron">${subExpanded ? "▲" : "▼"}</span>
+            </button>
+            ${subExpanded ? `<div class="cat-entries">${subEntriesHtml}</div>` : ""}
+          </div>`;
+      }).join("");
+      breakdownHtml = `<div class="cat-entries">${rowsHtml || `<div class="day-detail-empty">등록된 내역이 없습니다.</div>`}</div>`;
+    }
+    return `
+      <div class="cat-row-wrap">
+        <button class="cat-row" data-typecat="${typeId}">
+          <span class="icon">${meta.icon}</span>
+          <span class="name">${meta.label}</span>
+          <span class="amt ${meta.cls}">${meta.sign}${fmtNum(meta.total)}원</span>
+          <span class="chevron">${expanded ? "▲" : "▼"}</span>
+        </button>
+        ${breakdownHtml}
+      </div>`;
+  }).join("");
+
+  document.querySelectorAll("#catList [data-typecat]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.typecat;
+      if (state.dashExpandedCats.has(id)) state.dashExpandedCats.delete(id);
+      else state.dashExpandedCats.add(id);
+      renderDashboard();
+    });
+  });
+  document.querySelectorAll("#catList [data-subcat]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.subcat;
+      if (state.dashExpandedCats.has(id)) state.dashExpandedCats.delete(id);
+      else state.dashExpandedCats.add(id);
+      renderDashboard();
+    });
+  });
+  document.querySelectorAll("#catList .cat-entry-row").forEach(row => {
+    row.addEventListener("click", () => {
+      const entry = state.dashEntries.find(e => e.id === row.dataset.id);
+      if (entry) openEditModal(entry, state.currentLedger);
+    });
+  });
 }
 
 /* ====================== 자산 입력 / 차트 화면 ======================
