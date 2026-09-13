@@ -692,7 +692,7 @@
         <svg id="chartSvg" viewBox="0 0 320 180" width="320" height="180"></svg>
       </div>
       <div class="chart-legend" id="chartLegend" style="display:none;">
-        <span class="legend-item"><i style="background:var(--accent)"></i>자산</span>
+        <span class="legend-item"><i style="background:linear-gradient(90deg, var(--income) 50%, var(--expense) 50%)"></i>합계</span>
         <span class="legend-item"><i style="background:var(--expense)"></i>지출</span>
         <span class="legend-item"><i style="background:var(--income)"></i>수입</span>
         <span class="legend-item"><i style="background:var(--invest)"></i>투자</span>
@@ -3080,34 +3080,38 @@ function renderComboChart(svg, months, chartWidth) {
   const plotH = H - PAD_TOP - PAD_BOTTOM;
   const n = months.length;
 
+  // "전체" 콤보 차트는 자산 잔액 대신, 그 달의 수입-지출-투자 순합계를 막대로 보여준다.
+  const monthsWithNet = months.map(m => ({ ...m, net: m.income - m.expense - m.investment }));
+
   const scaleFor = (key) => {
-    const vals = months.map(m => m[key]);
+    const vals = monthsWithNet.map(m => m[key]);
     const minV = Math.min(0, ...vals);
     const maxV = Math.max(0, ...vals);
     const range = (maxV - minV) || 1;
     return (v) => PAD_TOP + plotH - ((v - minV) / range) * plotH;
   };
-  const balanceY = scaleFor("balance");
+  const netY = scaleFor("net");
   const expenseY = scaleFor("expense");
   const incomeY = scaleFor("income");
   const investmentY = scaleFor("investment");
+  const netColor = (v) => v < 0 ? "var(--expense)" : "var(--income)";
 
-  const firstLabel = `${Number(months[0].monthKey.split("-")[1])}월`;
+  const firstLabel = `${Number(monthsWithNet[0].monthKey.split("-")[1])}월`;
 
   setChartCanvasSize(svg, W, H);
 
   if (n === 1) {
     const cx = W / 2;
     const barW = 24;
-    const zeroY = balanceY(0);
-    const valY = balanceY(months[0].balance);
+    const zeroY = netY(0);
+    const valY = netY(monthsWithNet[0].net);
     const top = Math.min(zeroY, valY);
     const h = Math.max(2, Math.abs(zeroY - valY));
     svg.innerHTML = `
-      <rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW}" height="${h.toFixed(1)}" rx="3" fill="var(--accent)" opacity="0.55" />
-      <circle cx="${cx.toFixed(1)}" cy="${expenseY(months[0].expense).toFixed(1)}" r="1.6" fill="var(--expense)" />
-      <circle cx="${cx.toFixed(1)}" cy="${incomeY(months[0].income).toFixed(1)}" r="1.6" fill="var(--income)" />
-      <circle cx="${cx.toFixed(1)}" cy="${investmentY(months[0].investment).toFixed(1)}" r="1.6" fill="var(--invest)" />
+      <rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW}" height="${h.toFixed(1)}" rx="3" fill="${netColor(monthsWithNet[0].net)}" opacity="0.55" />
+      <circle cx="${cx.toFixed(1)}" cy="${expenseY(monthsWithNet[0].expense).toFixed(1)}" r="1.6" fill="var(--expense)" />
+      <circle cx="${cx.toFixed(1)}" cy="${incomeY(monthsWithNet[0].income).toFixed(1)}" r="1.6" fill="var(--income)" />
+      <circle cx="${cx.toFixed(1)}" cy="${investmentY(monthsWithNet[0].investment).toFixed(1)}" r="1.6" fill="var(--invest)" />
       <text x="${cx.toFixed(1)}" y="${H - 6}" font-size="10" fill="var(--text-dim)" text-anchor="middle">${firstLabel}</text>`;
     return;
   }
@@ -3115,15 +3119,15 @@ function renderComboChart(svg, months, chartWidth) {
   const stepX = (W - PAD_L - PAD_R) / n;
   const xOfCenter = (i) => PAD_L + stepX * (i + 0.5);
   const barW = Math.min(20, stepX * 0.5);
-  const zeroYBal = balanceY(0);
+  const zeroYBal = netY(0);
 
   let bars = "";
-  months.forEach((m, i) => {
+  monthsWithNet.forEach((m, i) => {
     const cx = xOfCenter(i);
-    const y = balanceY(m.balance);
+    const y = netY(m.net);
     const top = Math.min(zeroYBal, y);
     const h = Math.max(1.5, Math.abs(zeroYBal - y));
-    bars += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--accent)" opacity="0.5" />`;
+    bars += `<rect x="${(cx - barW / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${netColor(m.net)}" opacity="0.5" />`;
   });
 
   // 지출/수입/투자는 서로 다른 스케일로 독립 정규화되는데, 어떤 지표가 그 기간 중 가장
