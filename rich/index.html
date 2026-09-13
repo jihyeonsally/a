@@ -2072,7 +2072,6 @@ function renderDashboardAllTab(applyPayerFilter) {
         return `
           <div class="cat-row-wrap">
             <button class="cat-row" data-subcat="${subKey}">
-              <span class="icon">${c.icon}</span>
               <span class="name">${escapeHtml(c.label)}</span>
               <span class="amt ${meta.cls}">${meta.sign}${fmtNum(catTotals[c.id])}원</span>
               <span class="chevron">${subExpanded ? "▲" : "▼"}</span>
