@@ -2070,14 +2070,11 @@ function renderDashboardAllTab(applyPayerFilter) {
             </div>`;
         }).join("");
         return `
-          <div class="cat-row-wrap">
-            <button class="cat-row" data-subcat="${subKey}">
-              <span class="name">${escapeHtml(c.label)}</span>
-              <span class="amt ${meta.cls}">${meta.sign}${fmtNum(catTotals[c.id])}원</span>
-              <span class="chevron">${subExpanded ? "▲" : "▼"}</span>
-            </button>
-            ${subExpanded ? `<div class="cat-entries">${subEntriesHtml}</div>` : ""}
-          </div>`;
+          <div class="cat-entry-row" data-subcat="${subKey}">
+            <span class="entry-memo">${escapeHtml(c.label)}</span>
+            <span class="amt ${meta.cls}">${meta.sign}${fmtNum(catTotals[c.id])}원</span>
+          </div>
+          ${subExpanded ? `<div style="padding-left:14px;">${subEntriesHtml}</div>` : ""}`;
       }).join("");
       breakdownHtml = `<div class="cat-entries">${rowsHtml || `<div class="day-detail-empty">등록된 내역이 없습니다.</div>`}</div>`;
     }
@@ -2110,7 +2107,7 @@ function renderDashboardAllTab(applyPayerFilter) {
       renderDashboard();
     });
   });
-  document.querySelectorAll("#catList .cat-entry-row").forEach(row => {
+  document.querySelectorAll("#catList .cat-entry-row[data-id]").forEach(row => {
     row.addEventListener("click", () => {
       const entry = state.dashEntries.find(e => e.id === row.dataset.id);
       if (entry) openEditModal(entry, state.currentLedger);
