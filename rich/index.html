@@ -504,6 +504,10 @@
   .recurring-form .segmented{ margin-bottom:0; }
   .recurring-form .segmented button{ padding:8px 0; font-size:13px; }
 
+  .recurring-due-copy{ margin:0 0 10px; font-size:13px; line-height:1.5; }
+  .recurring-due-dismiss{ display:flex; gap:8px; align-items:center; margin:14px 0 4px; font-size:13px; line-height:1.5; }
+  .recurring-due-note{ margin:0 0 8px; font-size:12px; line-height:1.5; color:var(--text-dim); }
+
   /* ---------- Search sheet ---------- */
   .search-results{ margin-top:16px; display:flex; flex-direction:column; gap:8px; max-height:55vh; overflow-y:auto; }
   .search-date{ font-size:11px; color: var(--text-dim); width:34px; flex-shrink:0; }
@@ -796,6 +800,27 @@
     </div>
     <div class="sheet-body">
       <div id="recurringManageList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 도래한 고정 내역 안내 -->
+<div class="overlay" id="recurringDueOverlay">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="recurringDueTitle">
+    <div class="sheet-header">
+      <button class="close-btn" id="closeRecurringDue" aria-label="닫기">✕</button>
+      <div class="sheet-handle"></div>
+      <h3 id="recurringDueTitle">고정 내역 추가</h3>
+    </div>
+    <div class="sheet-body">
+      <p class="recurring-due-copy">날짜가 도래한 이번 달 고정 내역입니다. 추가할 내역을 선택해주세요.</p>
+      <div id="recurringDueList"></div>
+      <label class="recurring-due-dismiss">
+        <input type="checkbox" id="recurringDueDismiss" /> 이 내역 이번 달 다시 보지 않기 (모든 사용자)
+      </label>
+      <p class="recurring-due-note">이후 날짜의 새 내역과 다음 달 내역은 다시 안내합니다.</p>
+      <button class="manage-confirm-btn" id="recurringDueAdd">선택 내역 추가</button>
+      <button class="manage-add-btn" id="recurringDueLater">닫기</button>
     </div>
   </div>
 </div>
@@ -1128,14 +1153,14 @@ function listenRecurringItems(ledgerId) {
     }
     const data = snap.data();
     state.recurringItems = (data && data.items) || [];
-    // 자동 생성은 하지 않는다 — 목록에서 항목을 직접 눌러 확인해야만 그 달에 추가된다.
+    checkRecurringDue();
   }, (err) => {
     console.error("Firestore listen error (recurring):", err);
   });
 }
 
 async function saveRecurringItems(ledgerId, items) {
-  await db.collection(RECURRING_COLLECTION).doc(ledgerId).set({ items });
+  await db.collection(RECURRING_COLLECTION).doc(ledgerId).set({ items }, { merge: true });
 }
 
 // 고정 내역 관리 목록에서 항목을 누르고 확인 팝업에서 "예"를 누르면,
@@ -1152,27 +1177,8 @@ async function addRecurringItemToCurrentMonth(itemId) {
   if (recurringGenInFlight.has(docId)) return;
   recurringGenInFlight.add(docId);
   try {
-    const snap = await db.collection(COLLECTION).doc(docId).get();
-    const existing = (snap.data() && snap.data().entries) || [];
-    if (existing.some(e => e.recurringId === it.id)) {
-      alert("이미 이번 달에 추가된 고정 내역입니다.");
-      return;
-    }
-    const day = Math.min(Number(it.day) || 1, daysInMonth);
-    const newEntry = {
-      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
-      date: `${monthKey}-${String(day).padStart(2, "0")}`,
-      type: it.type || "expense",
-      amount: Number(it.amount) || 0,
-      category: it.category,
-      payer: ledgerId === "shared" ? (it.payer || "jihyeon") : ledgerId,
-      memo: it.memo || "",
-      recurringId: it.id,
-      createdAt: Date.now(),
-    };
-    await db.collection(COLLECTION).doc(docId).set({
-      entries: firebase.firestore.FieldValue.arrayUnion(newEntry)
-    }, { merge: true });
+    const added = await addRecurringEntries(ledgerId, monthKey, [it]);
+    if (!added) alert("이미 이번 달에 추가된 고정 내역입니다.");
   } catch (err) {
     console.error("고정 내역 추가 실패:", err);
     alert("추가에 실패했습니다.\n" + err.message);
@@ -1180,6 +1186,116 @@ async function addRecurringItemToCurrentMonth(itemId) {
     recurringGenInFlight.delete(docId);
   }
 }
+
+// 월 문서를 트랜잭션으로 갱신해 사용자 간 동시 추가도 중복되지 않게 한다.
+async function addRecurringEntries(ledgerId, monthKey, items, dismissedIds = []) {
+  const ref = db.collection(COLLECTION).doc(monthDocId(ledgerId, monthKey));
+  return db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    const data = snap.data() || {};
+    const entries = [...(data.entries || [])];
+    let added = 0;
+    const [year, month] = monthKey.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    for (const it of items) {
+      if (entries.some(e => e.recurringId === it.id)) continue;
+      entries.push({
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
+        date: `${monthKey}-${String(Math.min(Number(it.day) || 1, lastDay)).padStart(2, "0")}`,
+        type: it.type || "expense", amount: Number(it.amount) || 0,
+        category: it.category, payer: ledgerId === "shared" ? (it.payer || "jihyeon") : ledgerId,
+        memo: it.memo || "", recurringId: it.id, createdAt: Date.now(),
+      });
+      added++;
+    }
+    tx.set(ref, { entries, recurringDismissedIds: [...new Set([...(data.recurringDismissedIds || []), ...dismissedIds])] }, { merge: true });
+    return added;
+  });
+}
+
+const recurringDueSeen = new Set();
+let recurringDueContext = null;
+let recurringDueChecking = false;
+let recurringDueBusy = false;
+let recurringDueUnsub = null;
+function dueRecurringItems(items, data, now) {
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return items.filter(it => Math.min(Number(it.day) || 1, lastDay) <= now.getDate()
+    && !(data.entries || []).some(e => e.recurringId === it.id)
+    && !(data.recurringDismissedIds || []).includes(it.id))
+    .sort((a, b) => Number(a.day) - Number(b.day));
+}
+function hideRecurringDue() {
+  document.getElementById("recurringDueOverlay").classList.remove("show");
+  if (recurringDueUnsub) recurringDueUnsub();
+  recurringDueUnsub = null;
+  recurringDueContext = null;
+}
+function recurringItemLabel(it, ledgerId, categories = categoriesForLedger(ledgerId)) {
+  const type = it.type || "expense";
+  const cat = (categories[type] || []).find(c => c.id === it.category);
+  const payerLabel = ledgerId === "shared" ? ` · ${LEDGER_SHORT_LABEL[it.payer || "jihyeon"]}` : "";
+  return `${it.day}일 · ${cat ? cat.icon : "📦"} ${escapeHtml(cat ? cat.label : it.category)} · ${RECURRING_TYPE_SIGN[type]}${fmtNum(it.amount)}원${it.memo ? " · " + escapeHtml(it.memo) : ""}${payerLabel}`;
+}
+function renderRecurringDue(items, ledgerId) {
+  const cats = categoriesForLedger(ledgerId);
+  document.getElementById("recurringDueList").innerHTML = items.map(it =>
+    `<label class="manage-item-row"><input type="checkbox" data-due-id="${escapeHtml(it.id)}" checked />
+      <span class="manage-name">${recurringItemLabel(it, ledgerId, cats)}</span></label>`
+  ).join("");
+}
+async function checkRecurringDue() {
+  if (recurringDueChecking || recurringDueContext || document.hidden) return;
+  const now = new Date();
+  const ledgerId = state.currentLedger;
+  const monthKey = monthKeyOf(now);
+  const key = `${ledgerId}_${monthKey}_${now.getDate()}`;
+  if (recurringDueSeen.has(key)) return;
+  recurringDueChecking = true;
+  try {
+    const ref = db.collection(COLLECTION).doc(monthDocId(ledgerId, monthKey));
+    const snap = await ref.get({ source: "server" });
+    if (state.currentLedger !== ledgerId) return;
+    const items = dueRecurringItems(state.recurringItems, snap.data() || {}, now);
+    if (!items.length || document.querySelector(".overlay.show")) return;
+    recurringDueSeen.add(key);
+    recurringDueContext = { ledgerId, monthKey, items };
+    document.getElementById("recurringDueDismiss").checked = false;
+    document.getElementById("recurringDueTitle").textContent = `${LEDGER_SHORT_LABEL[ledgerId]} · ${now.getMonth() + 1}월 고정 내역`;
+    renderRecurringDue(items, ledgerId);
+    document.getElementById("recurringDueOverlay").classList.add("show");
+    recurringDueUnsub = ref.onSnapshot(update => {
+      if (!recurringDueContext || recurringDueBusy) return;
+      const remaining = dueRecurringItems(recurringDueContext.items, update.data() || {}, now);
+      if (!remaining.length) { hideRecurringDue(); return; }
+      const removed = new Set(recurringDueContext.items.filter(it => !remaining.some(x => x.id === it.id)).map(it => it.id));
+      document.querySelectorAll("[data-due-id]").forEach(input => {
+        if (removed.has(input.dataset.dueId)) input.closest("label").remove();
+      });
+      recurringDueContext.items = remaining;
+    });
+  } catch (err) { console.error("고정 내역 안내 확인 실패:", err); }
+  finally { recurringDueChecking = false; }
+}
+async function finishRecurringDue(addSelected) {
+  if (!recurringDueContext || recurringDueBusy) return;
+  recurringDueBusy = true;
+  const buttons = ["recurringDueAdd", "recurringDueLater", "closeRecurringDue"].map(id => document.getElementById(id));
+  buttons.forEach(btn => btn.disabled = true);
+  try {
+    const { ledgerId, monthKey, items } = recurringDueContext;
+    const selected = new Set([...document.querySelectorAll("[data-due-id]:checked")].map(input => input.dataset.dueId));
+    const dismiss = document.getElementById("recurringDueDismiss").checked;
+    if (addSelected || dismiss) await addRecurringEntries(ledgerId, monthKey,
+      addSelected ? items.filter(it => selected.has(it.id)) : [], dismiss ? items.map(it => it.id) : []);
+    hideRecurringDue();
+  } catch (err) { alert("고정 내역 처리에 실패했습니다. 다시 시도해주세요.\n" + err.message); }
+  finally { recurringDueBusy = false; buttons.forEach(btn => btn.disabled = false); }
+}
+document.getElementById("recurringDueAdd").addEventListener("click", () => finishRecurringDue(true));
+["recurringDueLater", "closeRecurringDue"].forEach(id => document.getElementById(id).addEventListener("click", () => finishRecurringDue(false)));
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkRecurringDue(); });
+setInterval(checkRecurringDue, 60000);
 
 function assetStructureDocId(ledgerId) {
   return `${ledgerId}_structure`;
@@ -2482,23 +2598,15 @@ function renderRecurringManageList() {
       </div>
     </div>`;
 
-  // 순서는 드래그로 조정한 그대로 저장된 배열 순서를 따른다 (day 기준 자동 정렬을 하지 않는다).
-  const rows = state.recurringItems.map(it => {
+  // 매월 날짜가 빠른 순으로 표시하며, 같은 날짜는 기존 순서를 유지한다.
+  const rows = [...state.recurringItems].sort((a, b) => Number(a.day) - Number(b.day)).map(it => {
     if (draft.mode === it.id) {
       return `<div class="manage-item-row" style="align-items:flex-start;">${formHtml()}</div>`;
     }
-    const type = it.type || "expense";
-    const cats = allCats[type] || [];
-    const cat = cats.find(c => c.id === it.category);
-    const catLabel = cat ? cat.label : it.category;
-    const catIcon = cat ? cat.icon : "📦";
-    const payerLabel = isShared ? ` · ${LEDGER_SHORT_LABEL[it.payer || "jihyeon"]}` : "";
-    const sign = RECURRING_TYPE_SIGN[type];
     return `
       <div class="manage-item-row" data-recurring-id="${it.id}">
-        <span class="drag-handle" data-drag="recurring">⠿</span>
         <span class="manage-name-wrap" data-add-recurring="${it.id}">
-          <span class="manage-name">${it.day}일 · ${catIcon} ${escapeHtml(catLabel)} · ${sign}${fmtNum(it.amount)}원${it.memo ? " · " + escapeHtml(it.memo) : ""}${payerLabel}</span>
+          <span class="manage-name">${recurringItemLabel(it, state.currentLedger, allCats)}</span>
         </span>
         <button class="manage-edit-btn" data-edit-recurring="${it.id}">수정</button>
         <button class="manage-del-btn" data-del-recurring="${it.id}">삭제</button>
@@ -2657,56 +2765,6 @@ document.getElementById("closeRecurringManageSheet").addEventListener("click", c
 document.getElementById("recurringManageOverlay").addEventListener("click", (e) => {
   if (e.target.id === "recurringManageOverlay") closeRecurringManageModal();
 });
-
-// 고정 내역 항목을 ⠿ 손잡이로 드래그해서 순서를 바꾼다. 목록이 다시 그려져도
-// (#recurringManageList 자체는 그대로라) 한 번만 등록해도 계속 동작한다.
-function initRecurringManageDrag() {
-  const root = document.getElementById("recurringManageList");
-  root.addEventListener("pointerdown", (e) => {
-    const handle = e.target.closest(".drag-handle");
-    if (!handle) return;
-    e.preventDefault();
-
-    const dragging = handle.closest(".manage-item-row");
-    if (!dragging) return;
-
-    dragging.classList.add("dragging");
-    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* 일부 브라우저에서 실패해도 무시 */ }
-
-    function onMove(ev) {
-      const siblings = Array.from(root.children).filter(el => el.matches(".manage-item-row") && el !== dragging);
-      for (const el of siblings) {
-        const rect = el.getBoundingClientRect();
-        if (ev.clientY >= rect.top && ev.clientY <= rect.bottom) {
-          if (ev.clientY < rect.top + rect.height / 2) root.insertBefore(dragging, el);
-          else root.insertBefore(dragging, el.nextSibling);
-          break;
-        }
-      }
-    }
-
-    function onUp() {
-      dragging.classList.remove("dragging");
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-
-      const newOrder = Array.from(root.children)
-        .filter(el => el.matches(".manage-item-row") && el.dataset.recurringId)
-        .map(el => el.dataset.recurringId);
-      state.recurringItems.sort((a, b) => newOrder.indexOf(a.id) - newOrder.indexOf(b.id));
-
-      saveRecurringItems(state.currentLedger, state.recurringItems).catch(err => {
-        console.error("순서 저장 실패:", err);
-        alert("순서 저장에 실패했습니다.\n" + err.message);
-      });
-      renderRecurringManageList();
-    }
-
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  });
-}
-initRecurringManageDrag();
 
 /* ---------- 자산 분류/항목 관리 모달 ---------- */
 // assetManageDraft.kind: null(입력창 없음) | "category"(분류 추가 입력창) | "item"(특정 분류의 항목 추가 입력창)
