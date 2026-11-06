@@ -393,18 +393,27 @@
   .schedule-preview.jihyun-important{background:#bfdbfe; color:#172554; font-weight:700;}
   .schedule-preview.hyeonje-event{background:#fce7f3; color:#831843;}
   .schedule-preview.hyeonje-important{background:#fbcfe8; color:#500724; font-weight:700;}
+  .schedule-preview.unassigned-important{background:#fde68a; color:#713f12; font-weight:700;}
   .schedule-more{color:var(--muted); font-size:10px;}
   .schedule-detail h2{margin:0 0 8px; font-size:13px;}
+  .schedule-detail-head{display:flex; align-items:baseline; justify-content:space-between; gap:8px;}
+  .schedule-dialog{width:min(420px,calc(100% - 24px)); max-height:85dvh; color:var(--ink);}
+  .schedule-dialog::backdrop{background:#15243c66;}
+  .schedule-dialog-actions{display:flex; justify-content:flex-end; gap:12px; width:100%;}
+  .schedule-range{flex:1 1 130px;}
+  .schedule-star{color:#946200;}
   @media(max-width:480px){
+    .schedule-panel{margin-inline:-17px; padding-inline:3px;}
+    .schedule-panel > :is(.p-title,.cal-head,.schedule-detail){margin-inline:10px;}
     .schedule-day,.schedule-blank{min-height:67px;}
     .schedule-day{padding:3px; gap:2px;}
     .schedule-preview{font-size:10px; padding-inline:2px;}
   }
   .schedule-form{display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin:16px 0;}
   .schedule-form label{display:grid; gap:4px; min-width:0; font-size:12px;}
-  .schedule-title{flex:1 1 140px;}
+  .schedule-title{flex:1 1 100%;}
   .schedule-form :is(input,select){font:inherit; font-size:16px; min-width:0; max-width:100%; padding:7px; border:1px solid var(--line,#dce4ed); border-radius:8px; background:var(--card,#fff); color:var(--ink);}
-  .schedule-item{display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 0;}
+  .schedule-item{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 0;}
   .schedule-item span{overflow-wrap:anywhere;}
 </style>
 </head>
@@ -744,27 +753,24 @@ const scheduleTypes = { event: '이벤트', important: '중요' };
 function renderMonthlySchedule(wrap){
   const [year, month] = selectedMonth.split('-').map(Number);
   const today = dateToStr(new Date());
-  const byDate = new Map();
-  for(const item of dashboard.plan){
-    if(!item.date.startsWith(selectedMonth + '-')) continue;
-    if(!byDate.has(item.date)) byDate.set(item.date, []);
-    byDate.get(item.date).push(item);
-  }
-  const items = byDate.get(selectedDate) || [];
+  const itemsForDate = date => dashboard.plan.filter(item =>
+    item.date <= date && date <= (item.endDate || item.date)
+  );
+  const items = itemsForDate(selectedDate);
   const firstWeekday = new Date(year, month - 1, 1).getDay();
   const dayCount = new Date(year, month, 0).getDate();
   const cells = Array.from({ length: dayCount }, (_, index) => {
     const day = index + 1;
     const date = selectedMonth + '-' + String(day).padStart(2, '0');
-    const entries = byDate.get(date) || [];
+    const entries = itemsForDate(date);
     return `
       <button type="button" class="schedule-day" data-date="${date}"
         aria-label="${month}월 ${day}일, 일정 ${entries.length}개"
         aria-pressed="${date === selectedDate}" ${date === today ? 'aria-current="date"' : ''}>
         <span class="schedule-date">${day}</span>
         ${entries.slice(0, 2).map(item => {
-          const classified = Object.hasOwn(schedulePeople, item.person) && Object.hasOwn(scheduleTypes, item.type);
-          const style = classified ? item.person + '-' + item.type : '';
+          const person = Object.hasOwn(schedulePeople, item.person) ? item.person : 'unassigned';
+          const style = Object.hasOwn(scheduleTypes, item.type) ? person + '-' + item.type : '';
           return `<span class="schedule-preview ${style}">${esc(item.title)}</span>`;
         }).join('')}
         ${entries.length > 2 ? `<span class="schedule-more">+${entries.length - 2}</span>` : ''}
@@ -773,7 +779,7 @@ function renderMonthlySchedule(wrap){
   const blank = '<span class="schedule-blank" aria-hidden="true"></span>';
   const trailing = (7 - (firstWeekday + dayCount) % 7) % 7;
   wrap.innerHTML = `
-    <section class="panel" style="--accent:var(--plan)">
+    <section class="panel schedule-panel" style="--accent:var(--plan)">
       <h1 class="p-title">🗓️ 월별 일정</h1>
       <div class="cal-head">
         <button type="button" id="schedulePrev" class="cal-nav" aria-label="이전 달" onclick="moveScheduleMonth(-1)">‹</button>
@@ -785,11 +791,30 @@ function renderMonthlySchedule(wrap){
         ${blank.repeat(firstWeekday)}${cells}${blank.repeat(trailing)}
       </div>
       <div class="schedule-detail">
-      <h2 id="scheduleDayTitle" tabindex="-1">${month}월 ${Number(selectedDate.slice(-2))}일 일정</h2>
+        <div class="schedule-detail-head">
+          <h2 id="scheduleDayTitle" tabindex="-1">${month}월 ${Number(selectedDate.slice(-2))}일 일정</h2>
+          <button type="button" id="scheduleAdd" class="line-add">+ 일정 추가</button>
+        </div>
+        <div class="schedule-list">
+          ${items.length ? items.map(item => `
+            <div class="schedule-item">
+              <span>${item.type === 'important' ? '<span class="schedule-star" role="img" aria-label="중요">★</span> ' : ''}${esc(item.title)}</span>
+              <div>
+                <button type="button" class="line-add" data-edit="${escAttr(item.id)}">수정</button>
+                <button type="button" class="line-add" data-remove="${escAttr(item.id)}" aria-label="일정 삭제">삭제</button>
+              </div>
+            </div>`).join('') : '<p class="p-sub">이날에 등록된 일정이 없어요.</p>'}
+        </div>
+      </div>
+    </section>
+    <dialog class="panel schedule-dialog" aria-labelledby="scheduleDialogTitle">
+      <h2 id="scheduleDialogTitle" class="p-title">일정 추가</h2>
       <form id="scheduleForm" class="schedule-form">
+        <label class="schedule-range">시작일 <input name="startDate" type="date" required></label>
+        <label class="schedule-range">종료일 <input name="endDate" type="date" required></label>
         <label>담당
-          <select name="person" required>
-            <option value="">선택</option>
+          <select name="person">
+            <option value="">빈칸</option>
             ${Object.entries(schedulePeople).map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}
           </select>
         </label>
@@ -800,22 +825,12 @@ function renderMonthlySchedule(wrap){
           </select>
         </label>
         <label class="schedule-title">일정 <input name="title" type="text" maxlength="160" required></label>
-        <button class="line-add" type="submit">추가</button>
+        <div class="schedule-dialog-actions">
+          <button class="line-add" type="button" id="scheduleCancel">취소</button>
+          <button class="line-add" type="submit">추가</button>
+        </div>
       </form>
-      <div class="schedule-list">
-        ${items.length ? items.map(item => `
-          <div class="schedule-item">
-            <time datetime="${escAttr(item.date)}">${Number(item.date.slice(-2))}일</time>
-            <span>${esc(item.title)}
-              ${Object.hasOwn(schedulePeople, item.person) && Object.hasOwn(scheduleTypes, item.type)
-                ? `<small>(${schedulePeople[item.person]} · ${scheduleTypes[item.type]})</small>` : ''}
-            </span>
-            <div><button type="button" class="line-add" data-edit="${escAttr(item.id)}">수정</button>
-            <button type="button" class="line-add" data-remove="${escAttr(item.id)}" aria-label="일정 삭제">삭제</button></div>
-          </div>`).join('') : '<p class="p-sub">이날에 등록된 일정이 없어요.</p>'}
-      </div>
-      </div>
-    </section>`;
+    </dialog>`;
   wrap.querySelectorAll('[data-date]').forEach(button => {
     button.onclick = () => {
       selectedDate = button.dataset.date;
@@ -823,37 +838,64 @@ function renderMonthlySchedule(wrap){
       document.getElementById('scheduleDayTitle').focus();
     };
   });
+  const dialog = wrap.querySelector('.schedule-dialog');
   const form = wrap.querySelector('#scheduleForm');
-  let editing = null;
+  const { startDate, endDate } = form.elements;
+  let editingId = null;
+  const openEditor = item => {
+    editingId = item?.id ?? null;
+    startDate.value = item?.date || selectedDate;
+    endDate.value = item?.endDate || startDate.value;
+    endDate.min = startDate.value;
+    form.elements.person.value = item?.person || '';
+    form.elements.type.value = item?.type || '';
+    form.elements.title.value = item?.title || '';
+    dialog.querySelector('h2').textContent = item ? '일정 수정' : '일정 추가';
+    form.querySelector('[type=submit]').textContent = item ? '변경 저장' : '추가';
+    dialog.showModal();
+  };
+  wrap.querySelector('#scheduleAdd').onclick = () => openEditor();
+  wrap.querySelector('#scheduleCancel').onclick = () => dialog.close();
+  startDate.onchange = () => {
+    if(endDate.value === endDate.min || endDate.value < startDate.value) endDate.value = startDate.value;
+    endDate.min = startDate.value;
+  };
   wrap.querySelectorAll('[data-edit]').forEach(button => {
     button.onclick = () => {
-      editing = items.find(item => item.id === button.dataset.edit);
-      form.elements.person.value = editing.person || '';
-      form.elements.type.value = editing.type || '';
-      form.elements.title.value = editing.title;
-      form.querySelector('[type=submit]').textContent = '변경 저장';
-      form.elements.title.focus();
+      const item = dashboard.plan.find(entry => entry.id === button.dataset.edit);
+      if(item) openEditor(item);
     };
   });
   form.onsubmit = event => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    const data = new FormData(form);
     const title = data.get('title').trim();
     const person = data.get('person');
     const type = data.get('type');
-    if(!title || !Object.hasOwn(schedulePeople, person) || !Object.hasOwn(scheduleTypes, type)) return;
-    if(editing){
-      const current = dashboard.plan.find(item => item.id === editing.id);
+    const date = startDate.value;
+    const lastDate = endDate.value;
+    if(!title || !date || !lastDate || lastDate < date ||
+       (person !== '' && !Object.hasOwn(schedulePeople, person)) || !Object.hasOwn(scheduleTypes, type)) return;
+    const details = { date, endDate: lastDate, title, person, type };
+    if(editingId !== null){
+      const current = dashboard.plan.find(item => item.id === editingId);
       if(!current){
+        dialog.close();
         renderPanel();
         return;
       }
-      Object.assign(current, { title, person, type });
+      Object.assign(current, details);
     }else{
-      dashboard.plan.push({ id: uid(), date: selectedDate, title, person, type });
+      dashboard.plan.push({ id: uid(), ...details });
+    }
+    dialog.close();
+    if(selectedDate < date || selectedDate > lastDate){
+      selectedDate = date;
+      selectedMonth = date.slice(0, 7);
     }
     queueSave();
     renderPanel();
+    document.getElementById('scheduleDayTitle').focus();
   };
   wrap.querySelectorAll('[data-remove]').forEach(button => {
     button.onclick = () => {
