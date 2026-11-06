@@ -370,6 +370,32 @@
     .hero h1{font-size:25px;}
   }
   .cal-head{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .schedule-calendar{
+    display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:1px;
+    background:var(--line,#dce4ed); border:1px solid var(--line,#dce4ed);
+    border-radius:12px; overflow:hidden; margin:12px 0 20px;
+  }
+  .schedule-weekday{background:var(--bg); text-align:center; padding:7px 0; font-size:12px; color:var(--muted);}
+  .schedule-day,.schedule-blank{background:var(--card,#fff); min-height:88px;}
+  .schedule-day{
+    display:flex; flex-direction:column; align-items:stretch; gap:3px; text-align:left;
+    border:0; padding:5px; color:var(--ink); font:inherit; cursor:pointer; min-width:0;
+  }
+  .schedule-day:hover,.schedule-day[aria-pressed=true]{background:var(--plan-soft);}
+  .schedule-day:focus-visible{outline:2px solid var(--accent); outline-offset:-2px;}
+  .schedule-date{align-self:flex-start; min-width:21px; text-align:center; font-size:12px;}
+  .schedule-day[aria-current=date] .schedule-date{background:var(--plan); border-radius:8px; font-weight:700;}
+  .schedule-preview{
+    display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    padding:1px 3px; border-radius:4px; background:var(--plan-soft); font-size:11px;
+  }
+  .schedule-more{color:var(--muted); font-size:10px;}
+  .schedule-detail h2{margin:0 0 8px; font-size:16px;}
+  @media(max-width:480px){
+    .schedule-day,.schedule-blank{min-height:67px;}
+    .schedule-day{padding:3px; gap:2px;}
+    .schedule-preview{font-size:10px; padding-inline:2px;}
+  }
   .schedule-form{display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin:16px 0;}
   .schedule-form label{display:grid; gap:4px; min-width:0;}
   .schedule-form input{font:inherit; max-width:100%; padding:7px;}
@@ -436,7 +462,8 @@ let activeTab = 'plan';
 let saveTimer = null;
 let pendingTab = null;
 let loaded = false;
-let selectedMonth = dateToStr(new Date()).slice(0, 7);
+let selectedDate = dateToStr(new Date());
+let selectedMonth = selectedDate.slice(0, 7);
 const dashboard = {
   plan: [],
   menu: { ingredients: '', days: Object.fromEntries(WD_KEYS.map(day => [day, { jihyun: '', hyeonje: '' }])) },
@@ -701,24 +728,54 @@ function getMonday(dateInput){
 function moveScheduleMonth(offset){
   const [year, month] = selectedMonth.split('-').map(Number);
   selectedMonth = dateToStr(new Date(year, month - 1 + offset, 1)).slice(0, 7);
+  selectedDate = selectedMonth + '-01';
   renderPanel();
+  document.querySelector(offset < 0 ? '#schedulePrev' : '#scheduleNext').focus();
 }
 
 function renderMonthlySchedule(wrap){
   const [year, month] = selectedMonth.split('-').map(Number);
   const today = dateToStr(new Date());
-  const items = dashboard.plan.filter(item => item.date.startsWith(selectedMonth + '-'))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const byDate = new Map();
+  for(const item of dashboard.plan){
+    if(!item.date.startsWith(selectedMonth + '-')) continue;
+    if(!byDate.has(item.date)) byDate.set(item.date, []);
+    byDate.get(item.date).push(item);
+  }
+  const items = byDate.get(selectedDate) || [];
+  const firstWeekday = new Date(year, month - 1, 1).getDay();
+  const dayCount = new Date(year, month, 0).getDate();
+  const cells = Array.from({ length: dayCount }, (_, index) => {
+    const day = index + 1;
+    const date = selectedMonth + '-' + String(day).padStart(2, '0');
+    const entries = byDate.get(date) || [];
+    return `
+      <button type="button" class="schedule-day" data-date="${date}"
+        aria-label="${month}월 ${day}일, 일정 ${entries.length}개"
+        aria-pressed="${date === selectedDate}" ${date === today ? 'aria-current="date"' : ''}>
+        <span class="schedule-date">${day}</span>
+        ${entries.slice(0, 2).map(item => `<span class="schedule-preview">${esc(item.title)}</span>`).join('')}
+        ${entries.length > 2 ? `<span class="schedule-more">+${entries.length - 2}</span>` : ''}
+      </button>`;
+  }).join('');
+  const blank = '<span class="schedule-blank" aria-hidden="true"></span>';
+  const trailing = (7 - (firstWeekday + dayCount) % 7) % 7;
   wrap.innerHTML = `
     <section class="panel" style="--accent:var(--plan)">
-      <h1 class="p-title">월별 일정</h1>
+      <h1 class="p-title">🗓️ 월별 일정</h1>
       <div class="cal-head">
-        <button type="button" class="cal-nav" aria-label="이전 달" onclick="moveScheduleMonth(-1)">‹</button>
+        <button type="button" id="schedulePrev" class="cal-nav" aria-label="이전 달" onclick="moveScheduleMonth(-1)">‹</button>
         <strong>${year}년 ${month}월</strong>
-        <button type="button" class="cal-nav" aria-label="다음 달" onclick="moveScheduleMonth(1)">›</button>
+        <button type="button" id="scheduleNext" class="cal-nav" aria-label="다음 달" onclick="moveScheduleMonth(1)">›</button>
       </div>
+      <div class="schedule-calendar">
+        ${['일','월','화','수','목','금','토'].map(day => `<span class="schedule-weekday">${day}</span>`).join('')}
+        ${blank.repeat(firstWeekday)}${cells}${blank.repeat(trailing)}
+      </div>
+      <div class="schedule-detail">
+      <h2 id="scheduleDayTitle" tabindex="-1">${month}월 ${Number(selectedDate.slice(-2))}일 일정</h2>
       <form id="scheduleForm" class="schedule-form">
-        <label>날짜 <input name="date" type="date" value="${today.startsWith(selectedMonth) ? today : selectedMonth + '-01'}" required></label>
+        <label>날짜 <input name="date" type="date" value="${selectedDate}" required></label>
         <label>일정 <input name="title" type="text" maxlength="160" required></label>
         <button class="line-add" type="submit">일정 추가</button>
       </form>
@@ -729,9 +786,17 @@ function renderMonthlySchedule(wrap){
             <span>${esc(item.title)}</span>
             <div><button type="button" class="line-add" data-edit="${escAttr(item.id)}">수정</button>
             <button type="button" class="line-add" data-remove="${escAttr(item.id)}" aria-label="일정 삭제">삭제</button></div>
-          </div>`).join('') : '<p class="p-sub">이달에 등록된 일정이 없어요.</p>'}
+          </div>`).join('') : '<p class="p-sub">이날에 등록된 일정이 없어요.</p>'}
+      </div>
       </div>
     </section>`;
+  wrap.querySelectorAll('[data-date]').forEach(button => {
+    button.onclick = () => {
+      selectedDate = button.dataset.date;
+      renderPanel();
+      document.getElementById('scheduleDayTitle').focus();
+    };
+  });
   const form = wrap.querySelector('#scheduleForm');
   let editing = null;
   wrap.querySelectorAll('[data-edit]').forEach(button => {
@@ -751,6 +816,7 @@ function renderMonthlySchedule(wrap){
     const date = data.get('date');
     if(editing) Object.assign(editing, { date, title });
     else dashboard.plan.push({ id: uid(), date, title });
+    selectedDate = date;
     selectedMonth = date.slice(0, 7);
     queueSave();
     renderPanel();
