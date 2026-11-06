@@ -389,16 +389,21 @@
     display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     padding:1px 3px; border-radius:4px; background:var(--plan-soft); font-size:11px;
   }
+  .schedule-preview.jihyun-event{background:#dbeafe; color:#1e3a8a;}
+  .schedule-preview.jihyun-important{background:#bfdbfe; color:#172554; font-weight:700;}
+  .schedule-preview.hyeonje-event{background:#fce7f3; color:#831843;}
+  .schedule-preview.hyeonje-important{background:#fbcfe8; color:#500724; font-weight:700;}
   .schedule-more{color:var(--muted); font-size:10px;}
-  .schedule-detail h2{margin:0 0 8px; font-size:16px;}
+  .schedule-detail h2{margin:0 0 8px; font-size:13px;}
   @media(max-width:480px){
     .schedule-day,.schedule-blank{min-height:67px;}
     .schedule-day{padding:3px; gap:2px;}
     .schedule-preview{font-size:10px; padding-inline:2px;}
   }
   .schedule-form{display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin:16px 0;}
-  .schedule-form label{display:grid; gap:4px; min-width:0;}
-  .schedule-form input{font:inherit; max-width:100%; padding:7px;}
+  .schedule-form label{display:grid; gap:4px; min-width:0; font-size:12px;}
+  .schedule-title{flex:1 1 140px;}
+  .schedule-form :is(input,select){font:inherit; font-size:16px; min-width:0; max-width:100%; padding:7px; border:1px solid var(--line,#dce4ed); border-radius:8px; background:var(--card,#fff); color:var(--ink);}
   .schedule-item{display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 0;}
   .schedule-item span{overflow-wrap:anywhere;}
 </style>
@@ -733,6 +738,9 @@ function moveScheduleMonth(offset){
   document.querySelector(offset < 0 ? '#schedulePrev' : '#scheduleNext').focus();
 }
 
+const schedulePeople = { jihyun: '지현', hyeonje: '현제' };
+const scheduleTypes = { event: '이벤트', important: '중요' };
+
 function renderMonthlySchedule(wrap){
   const [year, month] = selectedMonth.split('-').map(Number);
   const today = dateToStr(new Date());
@@ -754,7 +762,11 @@ function renderMonthlySchedule(wrap){
         aria-label="${month}월 ${day}일, 일정 ${entries.length}개"
         aria-pressed="${date === selectedDate}" ${date === today ? 'aria-current="date"' : ''}>
         <span class="schedule-date">${day}</span>
-        ${entries.slice(0, 2).map(item => `<span class="schedule-preview">${esc(item.title)}</span>`).join('')}
+        ${entries.slice(0, 2).map(item => {
+          const classified = Object.hasOwn(schedulePeople, item.person) && Object.hasOwn(scheduleTypes, item.type);
+          const style = classified ? item.person + '-' + item.type : '';
+          return `<span class="schedule-preview ${style}">${esc(item.title)}</span>`;
+        }).join('')}
         ${entries.length > 2 ? `<span class="schedule-more">+${entries.length - 2}</span>` : ''}
       </button>`;
   }).join('');
@@ -775,15 +787,29 @@ function renderMonthlySchedule(wrap){
       <div class="schedule-detail">
       <h2 id="scheduleDayTitle" tabindex="-1">${month}월 ${Number(selectedDate.slice(-2))}일 일정</h2>
       <form id="scheduleForm" class="schedule-form">
-        <label>날짜 <input name="date" type="date" value="${selectedDate}" required></label>
-        <label>일정 <input name="title" type="text" maxlength="160" required></label>
-        <button class="line-add" type="submit">일정 추가</button>
+        <label>담당
+          <select name="person" required>
+            <option value="">선택</option>
+            ${Object.entries(schedulePeople).map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}
+          </select>
+        </label>
+        <label>구분
+          <select name="type" required>
+            <option value="">선택</option>
+            ${Object.entries(scheduleTypes).map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}
+          </select>
+        </label>
+        <label class="schedule-title">일정 <input name="title" type="text" maxlength="160" required></label>
+        <button class="line-add" type="submit">추가</button>
       </form>
       <div class="schedule-list">
         ${items.length ? items.map(item => `
           <div class="schedule-item">
             <time datetime="${escAttr(item.date)}">${Number(item.date.slice(-2))}일</time>
-            <span>${esc(item.title)}</span>
+            <span>${esc(item.title)}
+              ${Object.hasOwn(schedulePeople, item.person) && Object.hasOwn(scheduleTypes, item.type)
+                ? `<small>(${schedulePeople[item.person]} · ${scheduleTypes[item.type]})</small>` : ''}
+            </span>
             <div><button type="button" class="line-add" data-edit="${escAttr(item.id)}">수정</button>
             <button type="button" class="line-add" data-remove="${escAttr(item.id)}" aria-label="일정 삭제">삭제</button></div>
           </div>`).join('') : '<p class="p-sub">이날에 등록된 일정이 없어요.</p>'}
@@ -802,7 +828,8 @@ function renderMonthlySchedule(wrap){
   wrap.querySelectorAll('[data-edit]').forEach(button => {
     button.onclick = () => {
       editing = items.find(item => item.id === button.dataset.edit);
-      form.elements.date.value = editing.date;
+      form.elements.person.value = editing.person || '';
+      form.elements.type.value = editing.type || '';
       form.elements.title.value = editing.title;
       form.querySelector('[type=submit]').textContent = '변경 저장';
       form.elements.title.focus();
@@ -812,12 +839,19 @@ function renderMonthlySchedule(wrap){
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const title = data.get('title').trim();
-    if(!title) return;
-    const date = data.get('date');
-    if(editing) Object.assign(editing, { date, title });
-    else dashboard.plan.push({ id: uid(), date, title });
-    selectedDate = date;
-    selectedMonth = date.slice(0, 7);
+    const person = data.get('person');
+    const type = data.get('type');
+    if(!title || !Object.hasOwn(schedulePeople, person) || !Object.hasOwn(scheduleTypes, type)) return;
+    if(editing){
+      const current = dashboard.plan.find(item => item.id === editing.id);
+      if(!current){
+        renderPanel();
+        return;
+      }
+      Object.assign(current, { title, person, type });
+    }else{
+      dashboard.plan.push({ id: uid(), date: selectedDate, title, person, type });
+    }
     queueSave();
     renderPanel();
   };
