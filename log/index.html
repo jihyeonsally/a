@@ -401,6 +401,10 @@
   .schedule-dialog::backdrop{background:#15243c66;}
   .schedule-dialog-actions{display:flex; justify-content:flex-end; gap:12px; width:100%;}
   .schedule-range{flex:1 1 130px;}
+  .schedule-options{display:flex; flex-wrap:wrap; gap:8px 12px; margin:0; padding:4px 0 0; border:0; min-width:0;}
+  .schedule-options legend{padding:0; font-size:12px;}
+  .schedule-options label{display:flex; align-items:center; gap:4px; cursor:pointer;}
+  .schedule-options input{margin:0; accent-color:var(--plan);}
   .schedule-star{color:#946200;}
   @media(max-width:480px){
     .schedule-panel{margin-inline:-17px; padding-inline:3px;}
@@ -412,7 +416,7 @@
   .schedule-form{display:flex; flex-wrap:wrap; align-items:end; gap:10px; margin:16px 0;}
   .schedule-form label{display:grid; gap:4px; min-width:0; font-size:12px;}
   .schedule-title{flex:1 1 100%;}
-  .schedule-form :is(input,select){font:inherit; font-size:16px; min-width:0; max-width:100%; padding:7px; border:1px solid var(--line,#dce4ed); border-radius:8px; background:var(--card,#fff); color:var(--ink);}
+  .schedule-form input:not([type=radio]){font:inherit; font-size:16px; min-width:0; max-width:100%; padding:7px; border:1px solid var(--line,#dce4ed); border-radius:8px; background:var(--card,#fff); color:var(--ink);}
   .schedule-item{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 0;}
   .schedule-item span{overflow-wrap:anywhere;}
 </style>
@@ -798,7 +802,7 @@ function renderMonthlySchedule(wrap){
         <div class="schedule-list">
           ${items.length ? items.map(item => `
             <div class="schedule-item">
-              <span>${item.type === 'important' ? '<span class="schedule-star" role="img" aria-label="중요">★</span> ' : ''}${esc(item.title)}</span>
+              <span>${esc(item.title)}${item.type === 'important' ? ' <span class="schedule-star" role="img" aria-label="중요">★</span>' : ''}</span>
               <div>
                 <button type="button" class="line-add" data-edit="${escAttr(item.id)}">수정</button>
                 <button type="button" class="line-add" data-remove="${escAttr(item.id)}" aria-label="일정 삭제">삭제</button>
@@ -812,18 +816,15 @@ function renderMonthlySchedule(wrap){
       <form id="scheduleForm" class="schedule-form">
         <label class="schedule-range">시작일 <input name="startDate" type="date" required></label>
         <label class="schedule-range">종료일 <input name="endDate" type="date" required></label>
-        <label>담당
-          <select name="person">
-            <option value="">빈칸</option>
-            ${Object.entries(schedulePeople).map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}
-          </select>
-        </label>
-        <label>구분
-          <select name="type" required>
-            <option value="">선택</option>
-            ${Object.entries(scheduleTypes).map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}
-          </select>
-        </label>
+        <fieldset class="schedule-options">
+          <legend>담당</legend>
+          <label><input type="radio" name="person" value="" checked> 함께</label>
+          ${Object.entries(schedulePeople).map(([key, label]) => `<label><input type="radio" name="person" value="${key}"> ${label}</label>`).join('')}
+        </fieldset>
+        <fieldset class="schedule-options">
+          <legend>구분</legend>
+          ${Object.entries(scheduleTypes).map(([key, label]) => `<label><input type="radio" name="type" value="${key}" required> ${label}</label>`).join('')}
+        </fieldset>
         <label class="schedule-title">일정 <input name="title" type="text" maxlength="160" required></label>
         <div class="schedule-dialog-actions">
           <button class="line-add" type="button" id="scheduleCancel">취소</button>
@@ -843,12 +844,13 @@ function renderMonthlySchedule(wrap){
   const { startDate, endDate } = form.elements;
   let editingId = null;
   const openEditor = item => {
+    form.reset();
     editingId = item?.id ?? null;
     startDate.value = item?.date || selectedDate;
     endDate.value = item?.endDate || startDate.value;
     endDate.min = startDate.value;
-    form.elements.person.value = item?.person || '';
-    form.elements.type.value = item?.type || '';
+    if(item?.person) form.elements.person.value = item.person;
+    if(item?.type) form.elements.type.value = item.type;
     form.elements.title.value = item?.title || '';
     dialog.querySelector('h2').textContent = item ? '일정 수정' : '일정 추가';
     form.querySelector('[type=submit]').textContent = item ? '변경 저장' : '추가';
