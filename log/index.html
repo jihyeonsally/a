@@ -229,40 +229,14 @@
   textarea:focus, input:focus{outline:none; border-color:var(--accent, var(--primary));}
   textarea.autosize{resize:none; overflow:hidden;}
 
-  /* ===== weekly table (menu / plan) ===== */
-  .week-wrap{overflow-x:auto; margin-bottom:6px; border-radius:12px;}
-  .week-table{border-collapse:collapse; width:100%; min-width:260px; table-layout:fixed;}
-  .week-table td.rowlabel, .week-table th:first-child{width:50px;}
-  .week-table th{
-    font-family:var(--font-mono); font-size:11px; color:var(--muted); font-weight:400;
-    padding:6px 4px; text-align:center;
-  }
-  .week-table td{padding:4px;}
-  .week-table td.rowlabel{
-    font-size:12.5px; font-weight:600; color:var(--ink); text-align:center;
-    white-space:nowrap; padding-right:6px; width:50px; vertical-align:middle;
-  }
-  .day-btn{
-    width:100%; border:1px solid transparent; background:none; cursor:pointer;
-    border-radius:8px; padding:5px 2px; display:inline-flex; flex-direction:column;
-    align-items:center; gap:1px; transition:background .15s ease, border-color .15s ease;
-  }
-  .day-btn:hover{background:var(--plan-soft); border-color:var(--plan);}
-  .rl-date{font-family:var(--font-mono); font-size:10.5px; color:var(--muted);}
-  .rl-wd{font-size:12.5px; font-weight:500; color:var(--ink);}
-  .week-table input{
-    width:100%; min-width:66px; border:1px solid var(--line); border-radius:8px;
-    padding:7px 5px; font-size:12.5px; background:var(--bg); text-align:center;
-  }
-  .week-table textarea.plan-cell{
-    width:100%; min-width:120px; border:1px solid var(--line); border-radius:8px;
-    padding:8px 8px; font-size:12.5px; background:var(--bg); text-align:left;
-    font-family:var(--font-body); color:var(--ink);
-    resize:none; overflow:hidden; line-height:1.6; min-height:38px;
-    white-space:pre-wrap;
-  }
-  .week-table textarea.plan-cell:focus{outline:none; border-color:var(--plan);}
-  .week-table textarea.plan-week-cell{text-align:center;}
+  .ingredient-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:12px 0 18px;}
+  .ingredient-grid label{display:flex; flex-direction:column; gap:6px;}
+  .ingredient-grid label:first-child{grid-row:span 2;}
+  .ingredient-grid label:first-child textarea{flex:1;}
+  .ingredient-grid .field-label{margin:0;}
+  .meal-row{display:grid; grid-template-columns:50px minmax(0,1fr); align-items:center; gap:8px; margin:6px 0;}
+  .meal-row span{text-align:center; font-size:12.5px;}
+  .meal-row textarea{min-height:38px;}
 
   .plan-top{
     display:flex; gap:16px; flex-wrap:wrap; align-items:stretch; margin-bottom:20px;
@@ -450,15 +424,8 @@
 
 <script>
 const WD = ['월','화','수','목','금','토','일'];
-const WD_EN = ['월','화','수','목','금','토','일'];
-function wdClass(i){
-  if(i===5) return 'wd-sat';
-  if(i===6) return 'wd-sun';
-  return '';
-}
 const WD_KEYS = ['mon','tue','wed','thu','fri','sat','sun'];
 const CAT_COLOR = {menu:'var(--menu)', plan:'var(--plan)', finance:'var(--finance)', happy:'var(--happy)', travel:'var(--travel)', goal:'var(--goal)'};
-const PERSON_COLS = [{key:'jihyun',label:'젼'},{key:'hyeonje',label:'제'}];
 
 const firebaseConfig = {
   apiKey: "AIzaSyB-ShWlxTiyT_hUZNN0U7Oss9j3r4ak5ek",
@@ -487,7 +454,7 @@ let selectedDate = dateToStr(new Date());
 let selectedMonth = selectedDate.slice(0, 7);
 const dashboard = {
   plan: [],
-  menu: { ingredients: '', days: Object.fromEntries(WD_KEYS.map(day => [day, { jihyun: '', hyeonje: '' }])) },
+  menu: { ingredients: '', freezer: '', pantry: '', days: {} },
   finance: { review: '', investReview: '', wishlist: [] },
   happiness: Object.fromEntries(['me', 'partner'].map(person => [person, { hearts: [true,true,true,true,true], good: '', wish: '', pledge: '' }])),
   travel: { items: [] },
@@ -502,12 +469,6 @@ function dateToStr(d){
   const day = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
 }
-function emptyBoolDays(){
-  const obj = {};
-  WD_KEYS.forEach(dk=> obj[dk] = false);
-  return obj;
-}
-
 function loadDashboard(){
   docRef.onSnapshot({ includeMetadataChanges: true }, snap => {
     if(snap.metadata.hasPendingWrites || (!loaded && snap.metadata.fromCache)) return;
@@ -561,14 +522,6 @@ function renderTabs(){
   });
 }
 
-function autoGrowPlan(ta){
-  const tr = ta.closest('tr');
-  const cells = tr ? Array.from(tr.querySelectorAll('textarea.plan-cell')) : [ta];
-  cells.forEach(c=>{ c.style.height = 'auto'; });
-  const max = Math.max(...cells.map(c=>c.scrollHeight));
-  cells.forEach(c=>{ c.style.height = max + 'px'; });
-}
-
 function autoGrow(ta){
   ta.style.height = 'auto';
   ta.style.height = ta.scrollHeight + 'px';
@@ -584,16 +537,25 @@ function renderPanel(){
     wrap.innerHTML = `
       <div class="panel" style="--accent:${color}">
         <div class="p-title">🍽️ 주간 식단표</div>
-        <div class="p-sub">식재료부터 끼니별 메뉴까지 한 번에 정리해요.</div>
+        <div class="ingredient-grid">
+          ${[['ingredients','냉장'],['freezer','냉동'],['pantry','실온']].map(([field, label]) => `
+            <label>
+              <span class="field-label">${label}</span>
+              <textarea class="autosize" oninput="autoGrow(this); m_updateMenuField('${field}', this.value)">${esc(m.menu[field])}</textarea>
+            </label>`).join('')}
+        </div>
 
-        <div class="field-label">식재료</div>
-        <textarea class="autosize" placeholder="냉장고에 있는 재료, 필요한 재료..." oninput="autoGrow(this)" onchange="m_updateMenuField('ingredients', this.value)">${esc(m.menu.ingredients)}</textarea>
-
-        <div class="field-label">주간 식단표</div>
-        ${renderMergeableWeekTable(m, 'menu')}
+        <div class="field-label">요일별 식단</div>
+        ${WD_KEYS.map((day, index) => {
+          const saved = m.menu.days?.[day];
+          const meal = typeof saved === 'string' ? saved : [saved?.jihyun, saved?.hyeonje].filter(Boolean).join('\n');
+          return `<label class="meal-row">
+            <span>${WD[index]}요일</span>
+            <textarea class="autosize" rows="1" oninput="autoGrow(this); updateMenuDay('${day}', this.value)">${esc(meal)}</textarea>
+          </label>`;
+        }).join('')}
       </div>
     `;
-    wrap.querySelectorAll('.plan-cell').forEach(autoGrowPlan);
   }
 
   if(activeTab==='plan') renderMonthlySchedule(wrap);
@@ -739,13 +701,6 @@ function renderGoalActions(g){
 }
 
 /* ---- menu / plan ---- */
-function getMonday(dateInput){
-  const d = new Date(dateInput);
-  d.setHours(0,0,0,0);
-  const day = d.getDay();
-  d.setDate(d.getDate() + (day===0 ? -6 : 1-day));
-  return d;
-}
 function moveScheduleMonth(offset){
   const [year, month] = selectedMonth.split('-').map(Number);
   selectedMonth = dateToStr(new Date(year, month - 1 + offset, 1)).slice(0, 7);
@@ -995,81 +950,14 @@ function renderMonthlySchedule(wrap){
   });
 }
 
-function renderMergeableWeekTable(m, domain){
-  const data = m[domain];
-  if(!data.merged) data.merged = emptyBoolDays();
-  const hlStart = getMonday(new Date());
-
-  const headerCells = PERSON_COLS.map(r=>`<th>${r.label}</th>`).join('');
-  const bodyRows = WD_KEYS.map((dk,i)=>{
-    const d = new Date(hlStart); d.setDate(d.getDate()+i);
-    const label = `
-      <button class="day-btn" onclick="toggleMerge('${domain}','${dk}')">
-        <span class="rl-date ${wdClass(i)}">${d.getDate()}</span>
-        <span class="rl-wd ${wdClass(i)}">${WD_EN[i]}</span>
-      </button>
-    `;
-    const day = data.days[dk];
-    let cellsHtml;
-    if(data.merged[dk]){
-      cellsHtml = `
-        <td colspan="2">
-          <textarea class="plan-cell plan-week-cell" rows="1"
-            oninput="autoGrowPlan(this); dayFieldUpdate('${domain}','${dk}','jihyun', this.value)">${esc(day.jihyun)}</textarea>
-        </td>
-      `;
-    }else{
-      cellsHtml = `
-        <td>
-          <textarea class="plan-cell plan-week-cell" rows="1"
-            oninput="autoGrowPlan(this); dayFieldUpdate('${domain}','${dk}','jihyun', this.value)">${esc(day.jihyun)}</textarea>
-        </td>
-        <td>
-          <textarea class="plan-cell plan-week-cell" rows="1"
-            oninput="autoGrowPlan(this); dayFieldUpdate('${domain}','${dk}','hyeonje', this.value)">${esc(day.hyeonje)}</textarea>
-        </td>
-      `;
-    }
-    return `<tr><td class="rowlabel">${label}</td>${cellsHtml}</tr>`;
-  }).join('');
-
-  return `<div class="week-wrap"><table class="week-table"><thead><tr><th></th>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
-}
-
-function toggleMerge(domain, dayKey){
-  const m = dashboard;
-  const data = m[domain];
-  if(!data.merged) data.merged = emptyBoolDays();
-  const day = data.days[dayKey];
-  const isMerged = !!data.merged[dayKey];
-
-  if(!isMerged){
-    const parts = [];
-    if(day.jihyun) parts.push(day.jihyun);
-    if(day.hyeonje) parts.push(day.hyeonje);
-    day.jihyun = parts.join('\n');
-    day.hyeonje = '';
-    data.merged[dayKey] = true;
-  }else{
-    const text = day.jihyun || '';
-    const idx = text.indexOf('\n');
-    if(idx === -1){
-      day.jihyun = text;
-      day.hyeonje = '';
-    }else{
-      day.jihyun = text.slice(0, idx);
-      day.hyeonje = text.slice(idx+1);
-    }
-    data.merged[dayKey] = false;
-  }
+function m_updateMenuField(field, value){
+  dashboard.menu[field] = value;
   queueSave();
-  renderPanel();
 }
 
-function m_updateMenuField(field, v){ dashboard.menu[field]=v; queueSave(); }
-
-function dayFieldUpdate(domain, dayKey, personKey, val){
-  dashboard[domain].days[dayKey][personKey] = val;
+function updateMenuDay(day, value){
+  dashboard.menu.days ??= {};
+  dashboard.menu.days[day] = value;
   queueSave();
 }
 
