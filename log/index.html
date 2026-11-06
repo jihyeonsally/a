@@ -401,6 +401,9 @@
   .schedule-dialog::backdrop{background:#15243c66;}
   .schedule-dialog-actions{display:flex; justify-content:flex-end; gap:12px; width:100%;}
   .schedule-options{display:flex; flex-wrap:wrap; gap:8px 12px; margin:0; padding:4px 0 0; border:0; min-width:0;}
+  .schedule-dictation{font-size:12px;}
+  .schedule-dictation label{display:grid; gap:4px; margin:6px 0;}
+  .schedule-dictation summary{cursor:pointer;}
   .schedule-options legend{padding:0; font-size:12px;}
   .schedule-options label{display:flex; align-items:center; gap:4px; cursor:pointer;}
   .schedule-options input{margin:0; accent-color:var(--plan);}
@@ -415,7 +418,7 @@
   .schedule-form{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:12px 10px; margin:16px 0;}
   .schedule-form{font-size:12px;}
   .schedule-form > label{display:grid; gap:4px; min-width:0;}
-  .schedule-title,.schedule-dialog-actions{grid-column:1 / -1;}
+  .schedule-dictation,.schedule-title,.schedule-dialog-actions{grid-column:1 / -1;}
   .schedule-form input:not([type=radio]){font:inherit; font-size:16px; min-width:0; max-width:100%; padding:7px; border:1px solid var(--line,#dce4ed); border-radius:8px; background:var(--card,#fff); color:var(--ink);}
   .schedule-item{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 0;}
   .schedule-item span{overflow-wrap:anywhere;}
@@ -754,6 +757,56 @@ function moveScheduleMonth(offset){
 const schedulePeople = { jihyun: '지현', hyeonje: '현제' };
 const scheduleTypes = { event: '이벤트', important: '중요' };
 
+
+function parseScheduleDictation(input, today = new Date()){
+  const sentence = input.trim();
+  const datePart = /^(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일(?:\s*(?:부터|[~～–-])\s*(?:(\d{4})\s*년\s*)?(?:(\d{1,2})\s*월\s*)?(\d{1,2})\s*일(?:\s*까지)?)?/;
+  const relativePart = /^(오늘|내일|모레|다음\s*주\s*([일월화수목금토])요일)(?=[\s,，.。]|$)/;
+  const absolute = sentence.match(datePart);
+  const relative = sentence.match(relativePart);
+  if(!absolute && !relative) return null;
+
+  let start, end;
+  if(absolute){
+    const [, year, month, day, endYear, endMonth, endDay] = absolute;
+    const firstYear = Number(year || today.getFullYear());
+    const lastMonth = Number(endMonth || month);
+    const lastYear = Number(endYear || (firstYear + (lastMonth < Number(month) ? 1 : 0)));
+    start = new Date(firstYear, Number(month) - 1, Number(day));
+    end = new Date(lastYear, lastMonth - 1, Number(endDay || day));
+    if(start.getFullYear() !== firstYear || start.getMonth() + 1 !== Number(month) ||
+       start.getDate() !== Number(day) || end.getFullYear() !== lastYear ||
+       end.getMonth() + 1 !== lastMonth || end.getDate() !== Number(endDay || day) ||
+       end < start) return null;
+  }else{
+    start = new Date(today);
+    const offsets = { 오늘: 0, 내일: 1, 모레: 2 };
+    const weekday = relative[2];
+    const offset = weekday
+      ? 7 - (today.getDay() + 6) % 7 + '월화수목금토일'.indexOf(weekday)
+      : offsets[relative[1]];
+    start.setDate(start.getDate() + offset);
+    end = start;
+  }
+
+  let rest = sentence.slice((absolute || relative)[0].length).replace(/^[\s,，.。]+/, '');
+  if(/^(?:부터|까지|[~～–-])/.test(rest)) return null;
+  const personMatch = rest.match(/^(함께|지현|현제)(?=[\s,，.。]|$)/);
+  if(personMatch) rest = rest.slice(personMatch[0].length).replace(/^[\s,，.。]+/, '');
+  const typeMatch = rest.match(/^(중요|이벤트)(?=[\s,，.。]|$)/);
+  if(typeMatch) rest = rest.slice(typeMatch[0].length).replace(/^[\s,，.。]+/, '');
+  const title = rest.replace(/[.。]\s*$/, '').trim();
+  if(!title || title.length > 160) return null;
+
+  return {
+    start: dateToStr(start),
+    end: dateToStr(end),
+    person: personMatch ? ({ 함께: '', 지현: 'jihyun', 현제: 'hyeonje' })[personMatch[1]] : null,
+    type: typeMatch ? ({ 중요: 'important', 이벤트: 'event' })[typeMatch[1]] : null,
+    title
+  };
+}
+
 function renderMonthlySchedule(wrap){
   const [year, month] = selectedMonth.split('-').map(Number);
   const today = dateToStr(new Date());
@@ -814,6 +867,15 @@ function renderMonthlySchedule(wrap){
     <dialog class="panel schedule-dialog" aria-labelledby="scheduleDialogTitle">
       <h2 id="scheduleDialogTitle" class="p-title">일정 추가</h2>
       <form id="scheduleForm" class="schedule-form">
+        <details class="schedule-dictation">
+          <summary>받아쓰기로 일정 채우기</summary>
+          <label>문장 입력
+            <input id="scheduleDictation" type="text" aria-describedby="scheduleDictationHint">
+          </label>
+          <div id="scheduleDictationHint">키보드 마이크로 말해보세요. 예) 11월 20일부터 22일까지, 함께, 중요, 부산 여행</div>
+          <button type="button" class="line-add" id="applyScheduleDictation">내용 채우기</button>
+          <div id="scheduleDictationStatus" role="status"></div>
+        </details>
         <label >시작일 <input name="startDate" type="date" required></label>
         <label >종료일 <input name="endDate" type="date" required></label>
         <fieldset class="schedule-options">
@@ -842,9 +904,34 @@ function renderMonthlySchedule(wrap){
   const dialog = wrap.querySelector('.schedule-dialog');
   const form = wrap.querySelector('#scheduleForm');
   const { startDate, endDate } = form.elements;
+  const dictation = form.querySelector('.schedule-dictation');
+  const dictationStatus = form.querySelector('#scheduleDictationStatus');
+  const dictationInput = form.querySelector('#scheduleDictation');
+  const applyDictation = form.querySelector('#applyScheduleDictation');
+  dictationInput.onkeydown = event => {
+    if(event.key !== 'Enter' || event.isComposing) return;
+    event.preventDefault();
+    applyDictation.click();
+  };
+  applyDictation.onclick = () => {
+    const result = parseScheduleDictation(dictationInput.value);
+    if(!result){
+      dictationStatus.textContent = '날짜와 일정 제목을 확인해 주세요. 예) 내일, 함께, 중요, 부산 여행';
+      return;
+    }
+    startDate.value = result.start;
+    endDate.min = result.start;
+    endDate.value = result.end;
+    if(result.person !== null) form.elements.person.value = result.person;
+    if(result.type !== null) form.elements.type.value = result.type;
+    form.elements.title.value = result.title;
+    dictationStatus.textContent = '채워진 날짜, 담당, 구분, 제목을 확인해 주세요.';
+  };
   let editingId = null;
   const openEditor = item => {
     form.reset();
+    dictation.open = false;
+    dictationStatus.textContent = '';
     editingId = item?.id ?? null;
     startDate.value = item?.date || selectedDate;
     endDate.value = item?.endDate || startDate.value;
